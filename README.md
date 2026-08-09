@@ -13,6 +13,18 @@ go build -o monicheck ./cmd/monicheck
 
 Open `http://127.0.0.1:8080/ui/static/`. Credentials are read from environment variables such as `MONICHECK_PROMETHEUS_BEARER_TOKEN`, `MONICHECK_GRAFANA_API_KEY`, and the corresponding `USERNAME`, `PASSWORD`, and TLS variables.
 
+For a multi-stack scan, use the versioned YAML configuration:
+
+```bash
+export PROMETHEUS_TOKEN='...'
+monicheck connectors validate --config ./monicheck.yaml
+monicheck local --config ./monicheck.yaml
+```
+
+See [`examples/local-config/monicheck.example.yaml`](examples/local-config/monicheck.example.yaml). Secret values are never accepted in YAML; `auth` fields reference environment variable names. Multiple instances of the same connector type are isolated by their stable `name`.
+
+Run `monicheck connectors list` to list supported types and telemetry groups. Local configuration supports Prometheus, Thanos, VictoriaMetrics, Mimir, Cortex, Grafana, Loki, Elasticsearch, OpenSearch, Tempo, Jaeger, SkyWalking, Pyroscope, OpenTelemetry Collector, Alertmanager, N9E, Kubernetes manifests, Datadog, and New Relic.
+
 To try MoniCheck without an existing endpoint, start `go run ./examples/prometheus-api-demo` in another terminal and point the Local command at the demo address printed there.
 
 For CI, run a single scan:
@@ -24,6 +36,7 @@ For CI, run a single scan:
 ## Scope
 
 - Local connectors and deterministic analyzers
+- Versioned multi-connector configuration and safe multi-instance namespacing
 - Coverage and risk analysis
 - Durable local snapshots and regression checks
 - Offline JSON reports and loopback-only UI

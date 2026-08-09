@@ -1,0 +1,35 @@
+version: 1
+
+connectors:
+  - type: prometheus
+    name: production-metrics
+    url: https://prometheus.example.com
+    auth:
+      bearer_token_env: PROMETHEUS_TOKEN
+    tls:
+      ca_file: /etc/monicheck/ca.pem
+      timeout: 20s
+
+  - type: grafana
+    name: shared-grafana
+    url: https://grafana.example.com
+    namespace: production
+    auth:
+      bearer_token_env: GRAFANA_TOKEN
+
+  - type: otelcol
+    name: gateway
+    path: /etc/otelcol/config.yaml
+    health_url: http://127.0.0.1:13133
+    metrics_url: http://127.0.0.1:8888/metrics
+
+  - type: loki
+    name: logs
+    url: https://loki.example.com
+    tenant_id: tenant-a
+    auth:
+      bearer_token_env: LOKI_TOKEN
+
+  - type: kubernetes
+    name: platform-manifests
+    path: ./manifests

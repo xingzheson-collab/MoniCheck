@@ -19,7 +19,7 @@ import (
 )
 
 type Options struct {
-	Listen, StoragePath, LogLevel                                  string
+	Listen, StoragePath, LogLevel, ConfigPath                      string
 	PrometheusURL, GrafanaURL, AlertmanagerURL, KubernetesManifest string
 }
 
@@ -36,7 +36,7 @@ func ValidateOptions(o Options) error {
 	if strings.TrimSpace(o.StoragePath) == "" {
 		return errors.New("--storage-path is required")
 	}
-	if o.PrometheusURL == "" && o.GrafanaURL == "" && o.AlertmanagerURL == "" && o.KubernetesManifest == "" {
+	if o.ConfigPath == "" && o.PrometheusURL == "" && o.GrafanaURL == "" && o.AlertmanagerURL == "" && o.KubernetesManifest == "" {
 		return errors.New("configure at least one local source")
 	}
 	return nil
@@ -83,6 +83,17 @@ func (r *Runtime) LatestReport(ctx context.Context) (model.ReportExport, error) 
 
 func buildConnectors(o Options) ([]connector.Connector, error) {
 	var result []connector.Connector
+	if strings.TrimSpace(o.ConfigPath) != "" {
+		cfg, err := LoadFileConfig(o.ConfigPath)
+		if err != nil {
+			return nil, fmt.Errorf("load --config: %w", err)
+		}
+		configured, err := buildConfiguredConnectors(cfg)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, configured...)
+	}
 	for _, item := range []struct{ id, url string }{{"prometheus", o.PrometheusURL}, {"grafana", o.GrafanaURL}, {"alertmanager", o.AlertmanagerURL}} {
 		if strings.TrimSpace(item.url) == "" {
 			continue
@@ -101,14 +112,14 @@ func buildConnectors(o Options) ([]connector.Connector, error) {
 		if err != nil {
 			return nil, fmt.Errorf("configure %s: %w", item.id, err)
 		}
-		result = append(result, c)
+		result = append(result, namespaceConnector(c, item.id+"-shortcut"))
 	}
 	if o.KubernetesManifest != "" {
 		c, err := connector.NewKubernetesManifestConnector(o.KubernetesManifest)
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, c)
+		result = append(result, namespaceConnector(c, "kubernetes-shortcut"))
 	}
 	return result, nil
 }

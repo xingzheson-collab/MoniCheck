@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"monicheck/internal/localruntime"
+	"monicheck/internal/model"
 )
 
 //go:embed static/*
@@ -57,8 +58,19 @@ func (s *Server) report(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"connectors": s.runtime.Engine.ConnectorStatuses()})
+	statuses := s.runtime.Engine.ConnectorStatuses()
+	views := make([]connectorStatusView, 0, len(statuses))
+	for _, status := range statuses {
+		views = append(views, connectorStatusView{ConnectorStatus: status, Group: localruntime.ConnectorGroup(status.ID)})
+	}
+	_ = json.NewEncoder(w).Encode(map[string]any{"connectors": views})
 }
+
+type connectorStatusView struct {
+	model.ConnectorStatus
+	Group string `json:"group"`
+}
+
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")

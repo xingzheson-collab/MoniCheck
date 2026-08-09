@@ -29,6 +29,8 @@ func main() {
 	switch os.Args[1] {
 	case "local":
 		os.Exit(runLocal(ctx, os.Args[2:], os.Stdout, os.Stderr))
+	case "connectors":
+		os.Exit(runConnectors(os.Args[2:], os.Stdout, os.Stderr))
 	case "version":
 		os.Exit(runVersion(os.Args[2:], os.Stdout, os.Stderr))
 	case "help", "-h", "--help":
@@ -49,6 +51,7 @@ func runLocal(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 	fs.StringVar(&opts.Listen, "listen", "127.0.0.1:8080", "loopback address for the Local UI")
 	fs.StringVar(&opts.StoragePath, "storage-path", defaultStoragePath(), "durable local state file")
 	fs.StringVar(&opts.LogLevel, "log-level", "quiet", "quiet, debug, info, warn, or error")
+	fs.StringVar(&opts.ConfigPath, "config", "", "YAML connector configuration file")
 	fs.StringVar(&opts.PrometheusURL, "prometheus-url", os.Getenv("MONICHECK_PROMETHEUS_URL"), "Prometheus endpoint")
 	fs.StringVar(&opts.GrafanaURL, "grafana-url", os.Getenv("MONICHECK_GRAFANA_URL"), "Grafana endpoint")
 	fs.StringVar(&opts.AlertmanagerURL, "alertmanager-url", os.Getenv("MONICHECK_ALERTMANAGER_URL"), "Alertmanager endpoint")
@@ -115,6 +118,41 @@ func runVersion(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "MoniCheck %s (%s, %s/%s)\n", info.Version, info.Commit, info.OS, info.Architecture)
 	return 0
 }
+
+func runConnectors(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "usage: monicheck connectors list | validate --config FILE")
+		return 2
+	}
+	switch args[0] {
+	case "list":
+		if len(args) != 1 {
+			return 2
+		}
+		fmt.Fprintln(stdout, "TYPE\tGROUP\tDESCRIPTION")
+		for _, item := range localruntime.ConnectorCatalog() {
+			fmt.Fprintf(stdout, "%s\t%s\t%s\n", item.Type, item.Group, item.Description)
+		}
+		return 0
+	case "validate":
+		fs := flag.NewFlagSet("connectors validate", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		path := fs.String("config", "", "YAML connector configuration file")
+		if err := fs.Parse(args[1:]); err != nil || fs.NArg() != 0 || strings.TrimSpace(*path) == "" {
+			return 2
+		}
+		cfg, err := localruntime.ValidateFileConfig(*path)
+		if err != nil {
+			fmt.Fprintf(stderr, "invalid connector config: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "Connector config valid: %d connector(s)\n", len(cfg.Connectors))
+		return 0
+	default:
+		fmt.Fprintf(stderr, "unknown connectors command %q\n", args[0])
+		return 2
+	}
+}
 func defaultStoragePath() string {
 	dir, err := os.UserConfigDir()
 	if err != nil {
@@ -129,5 +167,5 @@ func writePrivate(path, content string) error {
 	return os.WriteFile(path, []byte(content), 0o600)
 }
 func usage(out io.Writer) {
-	fmt.Fprintln(out, "MoniCheck - local observability governance\nUsage: monicheck local [options] | monicheck version")
+	fmt.Fprintln(out, "MoniCheck - local observability governance\nUsage: monicheck local [options] | monicheck connectors list|validate | monicheck version")
 }
