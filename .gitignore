@@ -1,0 +1,4 @@
+/bin/
+/monicheck
+/*.json
+.DS_Store
