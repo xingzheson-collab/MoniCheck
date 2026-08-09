@@ -24,8 +24,9 @@ type Options struct {
 }
 
 type Runtime struct {
-	Store  *storage.Store
-	Engine *execution.Engine
+	Store     *storage.Store
+	Engine    *execution.Engine
+	Execution model.ExecutionResult
 }
 
 func ValidateOptions(o Options) error {
@@ -61,7 +62,7 @@ func New(ctx context.Context, o Options) (*Runtime, error) {
 		return nil, err
 	}
 	_, _ = report.SaveLocalActivationTiming(ctx, store, started, time.Now().UTC(), 15*time.Minute)
-	return &Runtime{Store: store, Engine: engine}, nil
+	return &Runtime{Store: store, Engine: engine, Execution: executionResult}, nil
 }
 
 func (r *Runtime) LatestReport(ctx context.Context) (model.ReportExport, error) {

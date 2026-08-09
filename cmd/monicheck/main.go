@@ -47,7 +47,7 @@ func runLocal(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 	fs.SetOutput(stderr)
 	opts := localruntime.Options{}
 	check := false
-	format, reportOut := "text", ""
+	format, reportOut, bundleOut := "text", "", ""
 	fs.StringVar(&opts.Listen, "listen", "127.0.0.1:8080", "loopback address for the Local UI")
 	fs.StringVar(&opts.StoragePath, "storage-path", defaultStoragePath(), "durable local state file")
 	fs.StringVar(&opts.LogLevel, "log-level", "quiet", "quiet, debug, info, warn, or error")
@@ -59,7 +59,12 @@ func runLocal(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 	fs.BoolVar(&check, "check", false, "scan once and exit")
 	fs.StringVar(&format, "format", "text", "check output: text or json")
 	fs.StringVar(&reportOut, "report-out", "", "write governance JSON to a private file")
+	fs.StringVar(&bundleOut, "bundle-out", "", "write privacy-safe evidence-bundle.v1 to a private file")
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 {
+		return 2
+	}
+	if !check && (strings.TrimSpace(reportOut) != "" || strings.TrimSpace(bundleOut) != "") {
+		fmt.Fprintln(stderr, "--report-out and --bundle-out require --check")
 		return 2
 	}
 	if err := localruntime.ValidateOptions(opts); err != nil {
@@ -80,6 +85,18 @@ func runLocal(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 		export, loadErr := runtime.LatestReport(ctx)
 		if loadErr != nil || writePrivate(reportOut, export.Content) != nil {
 			fmt.Fprintln(stderr, "write report failed")
+			return 1
+		}
+	}
+	if bundleOut != "" {
+		bundle, buildErr := runtime.EvidenceBundle(ctx)
+		if buildErr != nil {
+			fmt.Fprintf(stderr, "build evidence bundle: %v\n", buildErr)
+			return 1
+		}
+		body, encodeErr := json.MarshalIndent(bundle, "", "  ")
+		if encodeErr != nil || writePrivate(bundleOut, string(append(body, '\n'))) != nil {
+			fmt.Fprintln(stderr, "write evidence bundle failed")
 			return 1
 		}
 	}

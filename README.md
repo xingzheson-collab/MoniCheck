@@ -33,6 +33,17 @@ For CI, run a single scan:
 ./monicheck local --prometheus-url http://127.0.0.1:9090 --check --format json --report-out ./monicheck-report.json
 ```
 
+To hand privacy-safe evidence to an optional private uploader, write the versioned bundle separately:
+
+```bash
+./monicheck local \
+  --config ./monicheck.yaml \
+  --check \
+  --bundle-out ./monicheck-evidence.json
+```
+
+`evidence-bundle.v1` contains aggregate governance, coverage, cost, connector health, and anonymous finding/resource references. It excludes credentials, endpoint URLs, resource names, queries, raw evidence, recommendations, dashboard JSON, and source configuration. Writing a bundle does not perform network I/O; enrollment, durable upload queues, tenant identity, and managed delivery remain outside this Local repository.
+
 ## Scope
 
 - Local connectors and deterministic analyzers
@@ -40,5 +51,6 @@ For CI, run a single scan:
 - Coverage and risk analysis
 - Durable local snapshots and regression checks
 - Offline JSON reports and loopback-only UI
+- Privacy-safe `evidence-bundle.v1` export boundary for optional external delivery
 
 Managed deployment and commercial services are maintained separately and are not part of this repository.
