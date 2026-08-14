@@ -4,6 +4,22 @@ MoniCheck is a local-first observability governance scanner for self-hosted and 
 
 This public repository is intentionally Local-only. It contains no hosted website, cloud account system, tenant control plane, Fleet management, billing, or managed execution code.
 
+## Download
+
+Prebuilt releases cover both common CPU families. In Go release names,
+`amd64` means Intel/AMD 64-bit x86 (`x86_64`), while `arm64` means 64-bit ARM.
+
+| Operating system | CPU reported by `uname -m` | Release archive suffix |
+| --- | --- | --- |
+| Linux | `x86_64` | `linux_amd64.tar.gz` |
+| Linux | `aarch64` or `arm64` | `linux_arm64.tar.gz` |
+| macOS | `x86_64` | `darwin_amd64.tar.gz` |
+| macOS | `arm64` (Apple silicon) | `darwin_arm64.tar.gz` |
+
+Download the matching archive and `SHA256SUMS` from the
+[latest GitHub Release](https://github.com/xingzheson-collab/MoniCheck/releases/latest).
+Verify the checksum before running the binary.
+
 ## Quick start
 
 ```bash
