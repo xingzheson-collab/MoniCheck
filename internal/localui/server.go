@@ -25,27 +25,32 @@ func New(address string, runtime *localruntime.Runtime) *Server {
 	return &Server{address: address, runtime: runtime}
 }
 func (s *Server) Run(ctx context.Context) error {
-	mux := http.NewServeMux()
-	assets, err := fs.Sub(staticFiles, "static")
-	if err != nil {
-		return err
-	}
-	mux.Handle("/ui/static/", http.StripPrefix("/ui/static/", http.FileServer(http.FS(assets))))
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/ui/static/", http.StatusFound) })
-	mux.HandleFunc("/api/v1/local/report", s.report)
-	mux.HandleFunc("/api/v1/local/status", s.status)
-	server := &http.Server{Addr: s.address, Handler: securityHeaders(mux), ReadHeaderTimeout: 5 * time.Second}
+	server := &http.Server{Addr: s.address, Handler: s.Handler(), ReadHeaderTimeout: 5 * time.Second}
 	go func() {
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = server.Shutdown(shutdown)
 	}()
-	err = server.ListenAndServe()
+	err := server.ListenAndServe()
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
 	}
 	return err
+}
+
+func (s *Server) Handler() http.Handler {
+	mux := http.NewServeMux()
+	assets, err := fs.Sub(staticFiles, "static")
+	if err != nil {
+		panic(err)
+	}
+	mux.Handle("/ui/static/", http.StripPrefix("/ui/static/", http.FileServer(http.FS(assets))))
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/ui/static/", http.StatusFound) })
+	mux.HandleFunc("/api/v1/local/report", s.report)
+	mux.HandleFunc("/api/v1/local/status", s.status)
+	mux.HandleFunc("/api/v1/local/activation-receipt", s.activationReceipt)
+	return securityHeaders(mux)
 }
 func (s *Server) report(w http.ResponseWriter, r *http.Request) {
 	export, err := s.runtime.LatestReport(r.Context())
@@ -64,6 +69,22 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 		views = append(views, connectorStatusView{ConnectorStatus: status, Group: localruntime.ConnectorGroup(status.ID)})
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{"connectors": views})
+}
+
+func (s *Server) activationReceipt(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	receipt, err := s.runtime.ActivationReceipt(r.Context())
+	if err != nil {
+		http.Error(w, "activation receipt unavailable", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", `attachment; filename="monicheck-activation-receipt.json"`)
+	_ = json.NewEncoder(w).Encode(receipt)
 }
 
 type connectorStatusView struct {

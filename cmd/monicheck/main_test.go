@@ -15,13 +15,13 @@ func TestVersionSupportsTextAndJSONContracts(t *testing.T) {
 	t.Cleanup(func() {
 		buildinfo.Version, buildinfo.Commit, buildinfo.BuildDate = previousVersion, previousCommit, previousDate
 	})
-	buildinfo.Version, buildinfo.Commit, buildinfo.BuildDate = "v0.6.1", strings.Repeat("a", 40), "2026-08-14T10:00:00Z"
+	buildinfo.Version, buildinfo.Commit, buildinfo.BuildDate = "v0.6.2", strings.Repeat("a", 40), "2026-08-14T10:00:00Z"
 
 	var stdout, stderr bytes.Buffer
 	if code := runVersion(nil, &stdout, &stderr); code != 0 {
 		t.Fatalf("text exit code = %d: %s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "MoniCheck v0.6.1") {
+	if !strings.Contains(stdout.String(), "MoniCheck v0.6.2") {
 		t.Fatalf("unexpected text output: %s", stdout.String())
 	}
 
@@ -34,7 +34,7 @@ func TestVersionSupportsTextAndJSONContracts(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &info); err != nil {
 		t.Fatalf("decode version JSON: %v", err)
 	}
-	if info.ContractVersion != "build-info.v1" || info.Version != "v0.6.1" || info.Commit != strings.Repeat("a", 40) {
+	if info.ContractVersion != "build-info.v1" || info.Version != "v0.6.2" || info.Commit != strings.Repeat("a", 40) {
 		t.Fatalf("unexpected build info: %+v", info)
 	}
 }

@@ -12,20 +12,23 @@ import (
 )
 
 type governanceEvidenceSummary struct {
-	ResourceCount                       int           `json:"resource_count"`
-	FindingCount                        int           `json:"finding_count"`
-	OpenFindingCount                    int           `json:"open_finding_count"`
-	CriticalCount                       int           `json:"critical_count"`
-	WarningCount                        int           `json:"warning_count"`
-	InfoCount                           int           `json:"info_count"`
-	CoverageServiceCount                int           `json:"coverage_service_count"`
-	CoveragePercent                     int           `json:"coverage_percent"`
-	CoverageMissingSignals              int           `json:"coverage_missing_signals"`
-	CoverageUnknownSignals              int           `json:"coverage_unknown_signals"`
-	CoverageEvaluableSignals            int           `json:"coverage_evaluable_signals"`
-	CoverageEvidenceState               string        `json:"coverage_evidence_state"`
-	CoverageEvidenceCompletenessPercent int           `json:"coverage_evidence_completeness_percent"`
-	Cost                                evidence.Cost `json:"cost_opportunities"`
+	ResourceCount                       int    `json:"resource_count"`
+	FindingCount                        int    `json:"finding_count"`
+	OpenFindingCount                    int    `json:"open_finding_count"`
+	CriticalCount                       int    `json:"critical_count"`
+	WarningCount                        int    `json:"warning_count"`
+	InfoCount                           int    `json:"info_count"`
+	CoverageServiceCount                int    `json:"coverage_service_count"`
+	CoveragePercent                     int    `json:"coverage_percent"`
+	CoverageMissingSignals              int    `json:"coverage_missing_signals"`
+	CoverageUnknownSignals              int    `json:"coverage_unknown_signals"`
+	CoverageEvaluableSignals            int    `json:"coverage_evaluable_signals"`
+	CoverageEvidenceState               string `json:"coverage_evidence_state"`
+	CoverageEvidenceCompletenessPercent int    `json:"coverage_evidence_completeness_percent"`
+	Coverage                            struct {
+		InferredServiceCount int `json:"inferred_service_count"`
+	} `json:"coverage"`
+	Cost evidence.Cost `json:"cost_opportunities"`
 }
 
 func (r *Runtime) EvidenceBundle(ctx context.Context) (evidence.Bundle, error) {

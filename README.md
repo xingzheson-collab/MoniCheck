@@ -27,6 +27,16 @@ Run `monicheck connectors list` to list supported types and telemetry groups. Lo
 
 To try MoniCheck without an existing endpoint, start `go run ./examples/prometheus-api-demo` in another terminal and point the Local command at the demo address printed there.
 
+After the first useful report, Local Overview exposes three explicit actions:
+
+- download and review `activation-receipt.v1` locally;
+- open the public activation feedback form;
+- request a bounded Managed Pilot evaluation.
+
+The receipt contains only aggregate report timing, counts, Coverage trust, and
+build identity. It excludes credentials, endpoints, resource names, Finding
+evidence, and user or machine identity. Nothing is uploaded automatically.
+
 For CI, run a single scan:
 
 ```bash
@@ -51,6 +61,7 @@ To hand privacy-safe evidence to an optional private uploader, write the version
 - Coverage and risk analysis
 - Durable local snapshots and regression checks
 - Offline JSON reports and loopback-only UI
+- Manual privacy-safe `activation-receipt.v1` download and feedback handoff
 - Privacy-safe `evidence-bundle.v1` export boundary for optional external delivery
 
 Managed deployment and commercial services are maintained separately and are not part of this repository.
