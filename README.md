@@ -33,6 +33,11 @@ After the first useful report, Local Overview exposes three explicit actions:
 - open the public activation feedback form;
 - request a bounded Managed Pilot evaluation.
 
+The externally reviewed validation targets and current progress are tracked in
+[design-partner validation issue #1](https://github.com/xingzheson-collab/MoniCheck/issues/1).
+Maintainer downloads, demo scans, fixtures, and synthetic submissions do not
+count as customer evidence.
+
 The receipt contains only aggregate report timing, counts, Coverage trust, and
 build identity. It excludes credentials, endpoints, resource names, Finding
 evidence, and user or machine identity. Nothing is uploaded automatically.
