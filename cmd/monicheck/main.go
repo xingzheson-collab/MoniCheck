@@ -127,13 +127,33 @@ func runLocal(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 }
 
 func runVersion(args []string, stdout, stderr io.Writer) int {
-	if len(args) != 0 {
-		fmt.Fprintln(stderr, "version accepts no arguments")
+	fs := flag.NewFlagSet("version", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	format := fs.String("format", "text", "output format: text or json")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(stderr, "version does not accept positional arguments")
 		return 2
 	}
 	info := buildinfo.Current()
-	fmt.Fprintf(stdout, "MoniCheck %s (%s, %s/%s)\n", info.Version, info.Commit, info.OS, info.Architecture)
-	return 0
+	switch *format {
+	case "text":
+		fmt.Fprintf(stdout, "MoniCheck %s (%s, %s/%s)\n", info.Version, info.Commit, info.OS, info.Architecture)
+		return 0
+	case "json":
+		encoded, err := json.MarshalIndent(info, "", "  ")
+		if err != nil {
+			fmt.Fprintf(stderr, "encode build info: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, string(encoded))
+		return 0
+	default:
+		fmt.Fprintf(stderr, "unsupported format %q\n", *format)
+		return 2
+	}
 }
 
 func runConnectors(args []string, stdout, stderr io.Writer) int {
