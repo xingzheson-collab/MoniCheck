@@ -1,0 +1,77 @@
+name: Local activation feedback
+description: Share privacy-safe evidence from a real no-account MoniCheck scan
+title: "[Activation]: "
+labels:
+  - activation
+  - feedback
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for testing MoniCheck beside a real observability stack. This issue is public. Do not paste endpoints, credentials, resource names, labels, queries, Finding evidence, or a full Governance report. The small `activation-receipt.v1` download is designed for this workflow and is never uploaded automatically.
+
+  - type: checkboxes
+    id: validation
+    attributes:
+      label: Validation boundary
+      options:
+        - label: This scan used at least one real source and was not the bundled demo.
+          required: true
+        - label: I reviewed the content and removed any private data before submitting.
+          required: true
+
+  - type: textarea
+    id: receipt
+    attributes:
+      label: Activation receipt
+      description: Paste the complete `activation-receipt.v1` JSON downloaded from Local Overview.
+      render: json
+    validations:
+      required: true
+
+  - type: dropdown
+    id: sources
+    attributes:
+      label: Source classes
+      description: Select source products only, never endpoint names or URLs.
+      multiple: true
+      options:
+        - Prometheus
+        - Grafana
+        - Kubernetes manifests
+        - Other supported source
+    validations:
+      required: true
+
+  - type: dropdown
+    id: material
+    attributes:
+      label: Material finding
+      description: Did the report identify something you would realistically investigate or change?
+      options:
+        - "Yes"
+        - "No"
+        - Unsure
+    validations:
+      required: true
+
+  - type: textarea
+    id: value
+    attributes:
+      label: What was useful or missing?
+      description: Finding type/category and workflow feedback are welcome. Do not include resource names, labels, queries, or raw evidence.
+      placeholder: "Example: MissingMonitoringCoverage changed what we would investigate; the next action needed more context."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: continuation
+    attributes:
+      label: Continuous governance interest
+      description: Would local history, team workflow, or optional Hybrid Managed summaries be worth a follow-up?
+      options:
+        - Yes, discuss a managed pilot
+        - Maybe, after another local scan
+        - No, local one-time use is enough
+    validations:
+      required: true
