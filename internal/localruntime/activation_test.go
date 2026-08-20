@@ -43,6 +43,17 @@ func TestActivationReceiptIsBoundedAndPrivacySafe(t *testing.T) {
 	}
 }
 
+func TestPrometheusDatasourceUIDRequiresBothShortcutSources(t *testing.T) {
+	base := Options{Listen: "127.0.0.1:8080", StoragePath: "state.json", PrometheusURL: "https://prometheus.test", PrometheusDatasourceUID: "prom-main"}
+	if err := ValidateOptions(base); err == nil || !strings.Contains(err.Error(), "requires both") {
+		t.Fatalf("expected missing Grafana validation, got %v", err)
+	}
+	base.GrafanaURL = "https://grafana.test"
+	if err := ValidateOptions(base); err != nil {
+		t.Fatalf("valid datasource binding rejected: %v", err)
+	}
+}
+
 func TestActivationReceiptBlocksWithoutConnectedInventory(t *testing.T) {
 	receipt := buildActivationReceipt(governanceEvidenceSummary{}, []model.ConnectorStatus{{Status: model.ExecutionStatusFailed}}, report.LocalActivationTiming{}, false, time.Now(), buildinfo.Info{})
 	if receipt.Ready || receipt.Outcome != "BLOCKED" || receipt.TimeToFirstReportSeconds != nil || receipt.Stages[0].State != "BLOCKED" {

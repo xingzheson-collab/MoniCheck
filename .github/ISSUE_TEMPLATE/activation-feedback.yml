@@ -65,6 +65,20 @@ body:
       required: true
 
   - type: dropdown
+    id: previously_unknown
+    attributes:
+      label: Previously unknown findings
+      description: How many findings were new to you and worth investigating? Share only the count range, never finding evidence.
+      options:
+        - "0"
+        - "1"
+        - "2-5"
+        - "6 or more"
+        - Unsure
+    validations:
+      required: true
+
+  - type: dropdown
     id: continuation
     attributes:
       label: Continuous governance interest

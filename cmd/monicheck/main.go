@@ -56,6 +56,7 @@ func runLocal(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 	fs.StringVar(&opts.LogLevel, "log-level", "quiet", "quiet, debug, info, warn, or error")
 	fs.StringVar(&opts.ConfigPath, "config", "", "YAML connector configuration file")
 	fs.StringVar(&opts.PrometheusURL, "prometheus-url", os.Getenv("MONICHECK_PROMETHEUS_URL"), "Prometheus endpoint")
+	fs.StringVar(&opts.PrometheusDatasourceUID, "prometheus-datasource-uid", os.Getenv("MONICHECK_GRAFANA_PROMETHEUS_DATASOURCE_UID"), "Grafana datasource UID bound to the Prometheus endpoint")
 	fs.StringVar(&opts.GrafanaURL, "grafana-url", os.Getenv("MONICHECK_GRAFANA_URL"), "Grafana endpoint")
 	fs.StringVar(&opts.AlertmanagerURL, "alertmanager-url", os.Getenv("MONICHECK_ALERTMANAGER_URL"), "Alertmanager endpoint")
 	fs.StringVar(&opts.KubernetesManifest, "kubernetes-manifest", os.Getenv("MONICHECK_KUBERNETES_MANIFEST_PATH"), "manifest file or directory")

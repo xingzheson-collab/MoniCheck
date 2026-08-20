@@ -19,9 +19,9 @@ import (
 )
 
 type Options struct {
-	Listen, StoragePath, LogLevel, ConfigPath                      string
-	PrometheusURL, GrafanaURL, AlertmanagerURL, KubernetesManifest string
-	ActivationStartedAt                                            time.Time
+	Listen, StoragePath, LogLevel, ConfigPath                                               string
+	PrometheusURL, PrometheusDatasourceUID, GrafanaURL, AlertmanagerURL, KubernetesManifest string
+	ActivationStartedAt                                                                     time.Time
 }
 
 type Runtime struct {
@@ -40,6 +40,9 @@ func ValidateOptions(o Options) error {
 	}
 	if o.ConfigPath == "" && o.PrometheusURL == "" && o.GrafanaURL == "" && o.AlertmanagerURL == "" && o.KubernetesManifest == "" {
 		return errors.New("configure at least one local source")
+	}
+	if strings.TrimSpace(o.PrometheusDatasourceUID) != "" && (strings.TrimSpace(o.PrometheusURL) == "" || strings.TrimSpace(o.GrafanaURL) == "") {
+		return errors.New("--prometheus-datasource-uid requires both --prometheus-url and --grafana-url")
 	}
 	return nil
 }
@@ -112,7 +115,11 @@ func buildConnectors(o Options) ([]connector.Connector, error) {
 		case "prometheus":
 			c, err = connector.NewPrometheusConnectorWithOptions(item.url, httpOptions)
 		case "grafana":
-			c, err = connector.NewGrafanaConnectorWithOptions(item.url, httpOptions)
+			grafanaConnector, createErr := connector.NewGrafanaConnectorWithOptions(item.url, httpOptions)
+			if createErr == nil && strings.TrimSpace(o.PrometheusURL) != "" {
+				createErr = grafanaConnector.ConfigurePrometheusDatasource(o.PrometheusURL, o.PrometheusDatasourceUID)
+			}
+			c, err = grafanaConnector, createErr
 		case "alertmanager":
 			c, err = connector.NewAlertmanagerConnectorWithOptions(item.url, httpOptions)
 		}

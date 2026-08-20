@@ -48,6 +48,9 @@ func TestGrafanaConnectorSync(t *testing.T) {
 		t.Fatalf("new connector: %v", err)
 	}
 	connector.client = testHTTPClient(handler)
+	if err := connector.ConfigurePrometheusDatasource("https://prometheus-public.test", "prom"); err != nil {
+		t.Fatalf("configure Prometheus datasource binding: %v", err)
+	}
 
 	snapshot, err := connector.Sync(context.Background())
 	if err != nil {
@@ -56,8 +59,8 @@ func TestGrafanaConnectorSync(t *testing.T) {
 	if snapshot.Partial {
 		t.Fatal("expected successful empty optional endpoints to produce a complete snapshot")
 	}
-	if len(snapshot.Diagnostics) != 10 {
-		t.Fatalf("expected dashboard-search, dashboard-detail, datasource-health, and seven optional diagnostics, got %#v", snapshot.Diagnostics)
+	if len(snapshot.Diagnostics) != 11 {
+		t.Fatalf("expected dashboard-search, dashboard-detail, datasource-link, datasource-health, and seven optional diagnostics, got %#v", snapshot.Diagnostics)
 	}
 	for _, diagnostic := range snapshot.Diagnostics {
 		if diagnostic.Status != model.ExecutionStatusSucceeded {
@@ -77,7 +80,7 @@ func TestGrafanaConnectorSync(t *testing.T) {
 	assertRelationship(t, snapshot, model.RelationshipUses, model.ResourceTypePanel, model.ResourceTypeMetric)
 	assertRelationship(t, snapshot, model.RelationshipUses, model.ResourceTypeDashboard, model.ResourceTypeDatasource)
 	assertRelationship(t, snapshot, model.RelationshipUses, model.ResourceTypeDashboard, model.ResourceTypeMetric)
-	assertMetricInstance(t, snapshot, model.StableID("datasource-endpoint", "http://prometheus:9090"))
+	assertMetricInstance(t, snapshot, "https://prometheus-public.test")
 	assertMetric(t, snapshot, "node_cpu_seconds_total")
 	assertDashboardMetadata(t, snapshot, "api", "service-folder", "Service Dashboards", "api-overview")
 	assertFolderMetadata(t, snapshot, "service-folder", "Service Dashboards")
@@ -108,6 +111,49 @@ func TestGrafanaConnectorSync(t *testing.T) {
 		strings.Contains(string(encoded), "http://prometheus:9090") ||
 		strings.Contains(string(encoded), "/d/api/api-overview") {
 		t.Fatalf("Grafana secrets and discovered URLs must not be persisted: %s", encoded)
+	}
+}
+
+func TestGrafanaDefaultDatasourceAndUnlinkedPrometheusAreVisible(t *testing.T) {
+	defaultDatasource := model.Resource{
+		ID:   "default",
+		Type: model.ResourceTypeDatasource,
+		Metadata: map[string]string{
+			model.MetadataDatasourceType: "prometheus",
+			model.MetadataDatasourceURL:  "http://prometheus.monitoring.svc:9090",
+		},
+	}
+	resolved, ok := datasourceForRef(grafanaRef{}, map[string]model.Resource{grafanaDefaultDatasourceKey: defaultDatasource})
+	if !ok || !isPrometheusDatasource(resolved) {
+		t.Fatalf("empty panel datasource did not resolve to Grafana default: %#v", resolved)
+	}
+	panelDatasource := model.Resource{ID: "panel"}
+	targetDatasource := model.Resource{ID: "target"}
+	datasources := map[string]model.Resource{
+		grafanaDefaultDatasourceKey: defaultDatasource,
+		"panel":                     panelDatasource,
+		"target":                    targetDatasource,
+	}
+	if got, ok := effectiveGrafanaTargetDatasource(grafanaPanel{Datasource: grafanaRef{UID: "panel"}}, grafanaTarget{Datasource: grafanaRef{UID: "target"}}, datasources); !ok || got.ID != "target" {
+		t.Fatalf("target datasource did not take precedence: %#v", got)
+	}
+	if got, ok := effectiveGrafanaTargetDatasource(grafanaPanel{Datasource: grafanaRef{UID: "panel"}}, grafanaTarget{}, datasources); !ok || got.ID != "panel" {
+		t.Fatalf("panel datasource did not take precedence over default: %#v", got)
+	}
+	if got, ok := effectiveGrafanaTargetDatasource(grafanaPanel{}, grafanaTarget{}, datasources); !ok || got.ID != "default" {
+		t.Fatalf("empty target and panel did not use default datasource: %#v", got)
+	}
+
+	connector, err := NewGrafanaConnector("http://grafana.test", "token")
+	if err != nil {
+		t.Fatalf("new connector: %v", err)
+	}
+	if err := connector.ConfigurePrometheusDatasource("https://prometheus-public.test", ""); err != nil {
+		t.Fatalf("configure Prometheus source: %v", err)
+	}
+	diagnostic := connector.prometheusDatasourceLinkDiagnostic([]grafanaDatasource{{UID: "prom", Type: "prometheus", URL: "http://prometheus.monitoring.svc:9090"}})
+	if diagnostic.Status != model.ExecutionStatusWarning || diagnostic.Metadata["matched_count"] != "0" || !strings.Contains(diagnostic.Message, "--prometheus-datasource-uid") {
+		t.Fatalf("expected fail-visible unmatched datasource diagnostic, got %#v", diagnostic)
 	}
 }
 

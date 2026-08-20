@@ -328,14 +328,23 @@ func (c *namespacedConnector) Sync(ctx context.Context) (connector.Snapshot, err
 	if err != nil {
 		return snapshot, err
 	}
+	externalPrometheusMetrics := c.base.ID() == "grafana" && snapshotHasDiagnostic(snapshot, "grafana_prometheus_datasource_link")
 	idMap := make(map[string]string, len(snapshot.Resources))
+	resources := make([]model.Resource, 0, len(snapshot.Resources))
 	for index := range snapshot.Resources {
-		old := snapshot.Resources[index].ID
+		resource := snapshot.Resources[index]
+		old := resource.ID
+		if externalPrometheusMetrics && resource.Type == model.ResourceTypeMetric && resource.Source.System == "prometheus" {
+			idMap[old] = old
+			continue
+		}
 		next := model.StableID("local_connector_resource", c.id, old)
 		idMap[old] = next
-		snapshot.Resources[index].ID = next
-		snapshot.Resources[index].Source.Cluster = c.id
+		resource.ID = next
+		resource.Source.Cluster = c.id
+		resources = append(resources, resource)
 	}
+	snapshot.Resources = resources
 	for index := range snapshot.Relationships {
 		relation := &snapshot.Relationships[index]
 		relation.ID = model.StableID("local_connector_relationship", c.id, relation.ID)
@@ -350,4 +359,13 @@ func (c *namespacedConnector) Sync(ctx context.Context) (connector.Snapshot, err
 		snapshot.Diagnostics[index].ID = c.id + ":" + snapshot.Diagnostics[index].ID
 	}
 	return snapshot, nil
+}
+
+func snapshotHasDiagnostic(snapshot connector.Snapshot, id string) bool {
+	for _, diagnostic := range snapshot.Diagnostics {
+		if diagnostic.ID == id {
+			return true
+		}
+	}
+	return false
 }

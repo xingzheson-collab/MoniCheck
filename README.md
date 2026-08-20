@@ -51,6 +51,22 @@ monicheck local --config ./monicheck.yaml
 
 See [`examples/local-config/monicheck.example.yaml`](examples/local-config/monicheck.example.yaml). Secret values are never accepted in YAML; `auth` fields reference environment variable names. Multiple instances of the same connector type are isolated by their stable `name`.
 
+When Grafana stores an internal Prometheus URL that differs from the endpoint
+used by MoniCheck, bind the identities explicitly to prevent false unused-metric
+results:
+
+```bash
+./monicheck local \
+  --prometheus-url https://prometheus.example.com \
+  --grafana-url https://grafana.example.com \
+  --prometheus-datasource-uid prom-main
+```
+
+Panels without an explicit datasource use Grafana's declared default
+datasource. If no explicit binding or exact URL match exists, the Grafana
+connector reports `WARNING` instead of silently treating dashboard metrics as
+an unrelated source.
+
 For monitoring-gap detection, combine telemetry evidence with an independent
 service inventory. A Prometheus-only scan can assess observed metrics, but
 services inferred from those same metrics cannot prove estate-wide coverage.

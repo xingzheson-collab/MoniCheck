@@ -25,6 +25,8 @@ const (
 	defaultGrafanaDashboardDetailWorkers  = 8
 	maxGrafanaDashboardDetailWorkers      = 64
 	defaultGrafanaDatasourceHealthWorkers = 8
+	grafanaDefaultDatasourceKey           = "__monicheck_default_datasource__"
+	grafanaMetricInstanceMetadataKey      = "monicheck_metric_instance"
 )
 
 type GrafanaConnector struct {
@@ -33,10 +35,24 @@ type GrafanaConnector struct {
 	namespace string
 	client    *http.Client
 
-	dashboardSearchPageSize int
-	dashboardSearchLimit    int
-	dashboardDetailWorkers  int
-	datasourceHealthWorkers int
+	dashboardSearchPageSize  int
+	dashboardSearchLimit     int
+	dashboardDetailWorkers   int
+	datasourceHealthWorkers  int
+	prometheusMetricInstance string
+	prometheusDatasourceUID  string
+}
+
+// ConfigurePrometheusDatasource binds Grafana query evidence to the canonical
+// Prometheus connector identity even when Grafana stores an internal URL.
+func (c *GrafanaConnector) ConfigurePrometheusDatasource(metricInstance string, datasourceUID string) error {
+	metricInstance = strings.TrimRight(strings.TrimSpace(metricInstance), "/")
+	if metricInstance == "" {
+		return fmt.Errorf("prometheus metric instance is empty")
+	}
+	c.prometheusMetricInstance = metricInstance
+	c.prometheusDatasourceUID = strings.TrimSpace(datasourceUID)
+	return nil
 }
 
 func NewGrafanaConnector(baseURL string, apiKey string) (*GrafanaConnector, error) {
@@ -154,6 +170,19 @@ func (c *GrafanaConnector) Sync(ctx context.Context) (Snapshot, error) {
 			resource.Metadata[model.MetadataDatasourceUID] = datasource.UID
 			datasourceByUID[datasource.UID] = resource
 		}
+		if datasource.IsDefault {
+			datasourceByUID[grafanaDefaultDatasourceKey] = resource
+		}
+		if c.prometheusDatasourceUID != "" && datasource.UID == c.prometheusDatasourceUID && isPrometheusDatasource(resource) {
+			resource.Metadata[grafanaMetricInstanceMetadataKey] = c.prometheusMetricInstance
+			datasourceByUID[datasource.UID] = resource
+			if datasource.Name != "" {
+				datasourceByUID[datasource.Name] = resource
+			}
+			if datasource.IsDefault {
+				datasourceByUID[grafanaDefaultDatasourceKey] = resource
+			}
+		}
 		if datasource.Name != "" {
 			if _, exists := datasourceByUID[datasource.Name]; !exists {
 				datasourceByUID[datasource.Name] = resource
@@ -168,6 +197,9 @@ func (c *GrafanaConnector) Sync(ctx context.Context) (Snapshot, error) {
 			resource.Metadata[model.MetadataUpdatedAt] = updatedAt.Format(time.RFC3339)
 		}
 		addResource(resourceByID, resource)
+	}
+	if c.prometheusMetricInstance != "" {
+		diagnostics = append(diagnostics, c.prometheusDatasourceLinkDiagnostic(datasources))
 	}
 
 	dashboardDetails := c.dashboardDetails(ctx, dashboards, dashboardSearch.Details)
@@ -214,13 +246,11 @@ func (c *GrafanaConnector) Sync(ctx context.Context) (Snapshot, error) {
 			}
 			metricInstance := "grafana:" + c.baseURL
 			isPromQLVariable := shouldTreatGrafanaRefAsPromQL(variable.Datasource, datasourceByUID)
-			if variable.Datasource.UID != "" {
-				if datasource, ok := datasourceByUID[variable.Datasource.UID]; ok {
-					relationships = append(relationships, grafanaRelationship(dashboardResource.ID, datasource.ID, model.RelationshipUses, now))
-					isPromQLVariable = isPrometheusDatasource(datasource)
-					if datasourceURL := strings.TrimRight(datasource.Metadata[model.MetadataDatasourceURL], "/"); datasourceURL != "" {
-						metricInstance = datasourceURL
-					}
+			if datasource, ok := datasourceForRef(variable.Datasource, datasourceByUID); ok {
+				relationships = append(relationships, grafanaRelationship(dashboardResource.ID, datasource.ID, model.RelationshipUses, now))
+				isPromQLVariable = isPrometheusDatasource(datasource)
+				if datasourceURL := grafanaDatasourceMetricInstance(datasource); datasourceURL != "" {
+					metricInstance = datasourceURL
 				}
 			}
 			if !isPromQLVariable {
@@ -263,14 +293,14 @@ func (c *GrafanaConnector) Sync(ctx context.Context) (Snapshot, error) {
 
 			metricInstance := "grafana:" + c.baseURL
 			panelDatasource, hasPanelDatasource := datasourceForRef(panel.Datasource, datasourceByUID)
-			if panel.Datasource.UID != "" {
-				if datasource, ok := panelDatasource, hasPanelDatasource; ok {
+			if datasource, ok := panelDatasource, hasPanelDatasource; ok {
+				if panel.Datasource.UID != "" {
 					panelResource.Metadata[model.MetadataDatasourceUID] = panel.Datasource.UID
 					resourceByID[panelResource.ID] = panelResource
-					relationships = append(relationships, grafanaRelationship(panelResource.ID, datasource.ID, model.RelationshipUses, now))
-					if datasourceURL := strings.TrimRight(datasource.Metadata[model.MetadataDatasourceURL], "/"); datasourceURL != "" {
-						metricInstance = datasourceURL
-					}
+				}
+				relationships = append(relationships, grafanaRelationship(panelResource.ID, datasource.ID, model.RelationshipUses, now))
+				if datasourceURL := grafanaDatasourceMetricInstance(datasource); datasourceURL != "" {
+					metricInstance = datasourceURL
 				}
 			}
 
@@ -279,14 +309,14 @@ func (c *GrafanaConnector) Sync(ctx context.Context) (Snapshot, error) {
 					continue
 				}
 				targetMetricInstance := metricInstance
-				targetDatasource, hasTargetDatasource := datasourceForRef(target.Datasource, datasourceByUID)
+				targetDatasource, hasTargetDatasource := effectiveGrafanaTargetDatasource(panel, target, datasourceByUID)
 				if hasTargetDatasource {
 					if !isPrometheusDatasource(targetDatasource) {
 						continue
 					}
 					datasource := targetDatasource
 					appendGrafanaRelationship(&relationships, panelResource.ID, datasource.ID, model.RelationshipUses, now)
-					if datasourceURL := strings.TrimRight(datasource.Metadata[model.MetadataDatasourceURL], "/"); datasourceURL != "" {
+					if datasourceURL := grafanaDatasourceMetricInstance(datasource); datasourceURL != "" {
 						targetMetricInstance = datasourceURL
 					}
 				} else if target.Datasource.UID != "" {
@@ -365,6 +395,7 @@ func sanitizeGrafanaResourceURLs(resources map[string]model.Resource) {
 			}
 		}
 		delete(resource.Metadata, model.MetadataDatasourceURL)
+		delete(resource.Metadata, grafanaMetricInstanceMetadataKey)
 		delete(resource.Metadata, "url")
 		resources[id] = resource
 	}
@@ -405,22 +436,17 @@ func isPrivateGrafanaDatasourceHost(host string) bool {
 
 func panelPromQLExpressions(panel grafanaPanel, datasourceByUID map[string]model.Resource) []string {
 	expressions := make([]string, 0, len(panel.Targets))
-	panelDatasource, hasPanelDatasource := datasourceForRef(panel.Datasource, datasourceByUID)
 	for _, target := range panel.Targets {
 		expression := strings.TrimSpace(target.Expression)
 		if expression == "" {
 			continue
 		}
-		if datasource, ok := datasourceForRef(target.Datasource, datasourceByUID); ok {
+		if datasource, ok := effectiveGrafanaTargetDatasource(panel, target, datasourceByUID); ok {
 			if !isPrometheusDatasource(datasource) {
 				continue
 			}
 		} else if target.Datasource.UID != "" {
 			if !shouldTreatGrafanaRefAsPromQL(target.Datasource, datasourceByUID) {
-				continue
-			}
-		} else if hasPanelDatasource {
-			if !isPrometheusDatasource(panelDatasource) {
 				continue
 			}
 		} else if !shouldTreatGrafanaRefAsPromQL(panel.Datasource, datasourceByUID) {
@@ -1048,6 +1074,44 @@ func (c *GrafanaConnector) optionalDiagnostic(id string, name string, endpoint s
 		diagnostic.Metadata["error"] = err.Error()
 	}
 	return diagnostic
+}
+
+func (c *GrafanaConnector) prometheusDatasourceLinkDiagnostic(datasources []grafanaDatasource) model.Diagnostic {
+	prometheusCount := 0
+	matchedCount := 0
+	for _, datasource := range datasources {
+		if !strings.EqualFold(strings.TrimSpace(datasource.Type), "prometheus") {
+			continue
+		}
+		prometheusCount++
+		if c.prometheusDatasourceUID != "" {
+			if strings.TrimSpace(datasource.UID) == c.prometheusDatasourceUID {
+				matchedCount++
+			}
+			continue
+		}
+		if strings.TrimRight(strings.TrimSpace(datasource.URL), "/") == c.prometheusMetricInstance {
+			matchedCount++
+		}
+	}
+
+	status := model.ExecutionStatusSucceeded
+	message := "Grafana Prometheus datasource identity is linked to the configured Prometheus source"
+	if matchedCount == 0 {
+		status = model.ExecutionStatusWarning
+		message = "Grafana Prometheus datasource identity is not linked; dashboard metric usage may be incomplete. Configure --prometheus-datasource-uid."
+	}
+	return model.Diagnostic{
+		ID:      "grafana_prometheus_datasource_link",
+		Name:    "Grafana Prometheus datasource link",
+		Status:  status,
+		Message: message,
+		Metadata: map[string]string{
+			"explicit_binding":            strconv.FormatBool(c.prometheusDatasourceUID != ""),
+			"prometheus_datasource_count": strconv.Itoa(prometheusCount),
+			"matched_count":               strconv.Itoa(matchedCount),
+		},
+	}
 }
 
 func (c *GrafanaConnector) appAlertRules(ctx context.Context) ([]grafanaAlertRule, error) {
@@ -1912,10 +1976,17 @@ func appendGrafanaRelationship(relationships *[]model.Relationship, fromID strin
 func datasourceForRef(ref grafanaRef, datasourceByUID map[string]model.Resource) (model.Resource, bool) {
 	uid := strings.TrimSpace(ref.UID)
 	if uid == "" {
-		return model.Resource{}, false
+		uid = grafanaDefaultDatasourceKey
 	}
 	datasource, ok := datasourceByUID[uid]
 	return datasource, ok
+}
+
+func grafanaDatasourceMetricInstance(datasource model.Resource) string {
+	if bound := strings.TrimRight(strings.TrimSpace(datasource.Metadata[grafanaMetricInstanceMetadataKey]), "/"); bound != "" {
+		return bound
+	}
+	return strings.TrimRight(strings.TrimSpace(datasource.Metadata[model.MetadataDatasourceURL]), "/")
 }
 
 func decodeGrafanaRef(value any, target *grafanaRef) error {
@@ -1986,7 +2057,7 @@ func addGrafanaAlertRules(resources map[string]model.Resource, relationships *[]
 				if !isPrometheusDatasource(datasource) {
 					continue
 				}
-				if datasourceURL := strings.TrimRight(datasource.Metadata[model.MetadataDatasourceURL], "/"); datasourceURL != "" {
+				if datasourceURL := grafanaDatasourceMetricInstance(datasource); datasourceURL != "" {
 					metricInstance = datasourceURL
 				}
 			} else if !shouldTreatGrafanaRefAsPromQL(datasourceRef, datasourceByUID) {

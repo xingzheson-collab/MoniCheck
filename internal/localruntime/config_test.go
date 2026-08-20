@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"monicheck/internal/connector"
+	"monicheck/internal/model"
 )
 
 func TestLoadAndValidateMultiConnectorConfig(t *testing.T) {
@@ -37,6 +38,38 @@ connectors:
 	}
 	if connectors[0].ID() != "prometheus:production" || connectors[1].ID() != "loki:logs" {
 		t.Fatalf("unexpected IDs: %s, %s", connectors[0].ID(), connectors[1].ID())
+	}
+}
+
+type staticConnector struct {
+	id       string
+	snapshot connector.Snapshot
+}
+
+func (c staticConnector) ID() string                                       { return c.id }
+func (c staticConnector) Name() string                                     { return c.id }
+func (c staticConnector) Sync(context.Context) (connector.Snapshot, error) { return c.snapshot, nil }
+
+func TestNamespacedGrafanaKeepsCanonicalPrometheusMetricsExternal(t *testing.T) {
+	metricID := model.StableID("metric", "prometheus", "https://prometheus.test", "metric:http_requests_total")
+	panelID := "panel-1"
+	wrapped := namespaceConnector(staticConnector{id: "grafana", snapshot: connector.Snapshot{
+		Resources: []model.Resource{
+			{ID: panelID, Type: model.ResourceTypePanel, Source: model.SourceInfo{System: "grafana"}},
+			{ID: metricID, Type: model.ResourceTypeMetric, Source: model.SourceInfo{System: "prometheus", Instance: "https://prometheus.test"}},
+		},
+		Relationships: []model.Relationship{{ID: "uses", FromID: panelID, ToID: metricID, Type: model.RelationshipUses}},
+		Diagnostics:   []model.Diagnostic{{ID: "grafana_prometheus_datasource_link", Status: model.ExecutionStatusSucceeded}},
+	}}, "shared")
+	snapshot, err := wrapped.Sync(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Resources) != 1 || snapshot.Resources[0].Type != model.ResourceTypePanel {
+		t.Fatalf("Grafana snapshot overwrote canonical Prometheus Metric evidence: %#v", snapshot.Resources)
+	}
+	if len(snapshot.Relationships) != 1 || snapshot.Relationships[0].ToID != metricID || snapshot.Relationships[0].FromID == panelID {
+		t.Fatalf("cross-source Metric relationship was not preserved: %#v", snapshot.Relationships)
 	}
 }
 

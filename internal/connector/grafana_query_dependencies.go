@@ -118,7 +118,11 @@ func effectiveGrafanaTargetDatasource(panel grafanaPanel, target grafanaTarget, 
 	if strings.TrimSpace(target.Datasource.UID) != "" {
 		return datasourceForRef(target.Datasource, datasourceByUID)
 	}
-	return datasourceForRef(panel.Datasource, datasourceByUID)
+	if strings.TrimSpace(panel.Datasource.UID) != "" {
+		return datasourceForRef(panel.Datasource, datasourceByUID)
+	}
+	datasource, ok := datasourceByUID[grafanaDefaultDatasourceKey]
+	return datasource, ok
 }
 
 func grafanaTargetQueryLanguage(panel grafanaPanel, target grafanaTarget, datasourceByUID map[string]model.Resource) string {
