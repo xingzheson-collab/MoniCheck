@@ -2,6 +2,8 @@
 
 Status: Implemented MVP
 
+Release: v0.7.0 Preview
+
 ## Summary
 
 MoniCheck Public becomes a local evidence toolkit for existing AI agents. The deterministic Go Connector, graph, Analyzer, Coverage, Risk, Cost, report, and snapshot work remains the product core. A portable Agent Skill supplies domain decisions and report workflow; a local stdio MCP server supplies structured tool invocation.

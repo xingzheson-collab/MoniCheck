@@ -28,14 +28,12 @@ For any MCP-compatible agent, configure the absolute binary path with the `mcp` 
 
 Then ask the agent to run a read-only observability audit. The Agent Skill enforces evidence rules such as `UNKNOWN` not meaning `MISSING`; an unresolved Grafana datasource variable cannot justify a panel or metric deletion recommendation. See [`docs/agent-native-toolkit.md`](docs/agent-native-toolkit.md).
 
-> **Release status:** `v0.6.6` is a Preview shared-Grafana repair. A maintainer
-> scan found that `v0.6.5` ignored `MONICHECK_GRAFANA_API_KEY` and rejected
-> correctly bound Panel-to-Metric relationships during snapshot validation.
-> This release sends Grafana API keys as Bearer tokens and validates bound
-> Prometheus Metrics as read-only cross-source references without overwriting
-> their owning inventory. The repair passed a privacy-safe 39-datasource,
-> 146-panel topology fixture, but still requires a fresh external or maintainer
-> run against the original private source.
+> **Release status:** `v0.7.0` is the first Agent-native Preview. It adds the
+> portable `monicheck-observability-audit` Skill, a local stdio MCP server, and
+> bounded `agent-audit.v1` output while keeping collection and analysis inside
+> the deterministic Local engine. It also retains the `v0.6.6` shared-Grafana
+> datasource binding repair. Agent-facing output is privacy-safe; complete
+> owner evidence and raw reports remain local.
 
 ## Download
 
@@ -50,7 +48,7 @@ Prebuilt releases cover both common CPU families. In Go release names,
 | macOS | `arm64` (Apple silicon) | `darwin_arm64.tar.gz` |
 
 Download the matching archive and `SHA256SUMS` from the
-[v0.6.6 Preview Release](https://github.com/xingzheson-collab/MoniCheck/releases/tag/v0.6.6).
+[v0.7.0 Preview Release](https://github.com/xingzheson-collab/MoniCheck/releases/tag/v0.7.0).
 Verify the checksum before running the binary.
 
 ## Quick start
