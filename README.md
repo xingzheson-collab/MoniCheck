@@ -9,10 +9,12 @@ This public repository is intentionally Local-only. It contains no hosted websit
 > receipt incorrectly measured only the analyzer window. This release batches
 > durable writes, measures the complete command-to-report path, emits bounded
 > progress, keeps the observed 9,461-Finding comparison exact, and leads with
-> evidence completeness when source evidence is partial. The retained real
-> state completes analysis and report persistence in about three seconds, but a
-> fresh same-source scan is still required before the 15-minute target is
-> considered real-scale validated.
+> evidence completeness when source evidence is partial. On 2026-08-20, the
+> GitHub-downloaded binary completed a fresh scan of the same real source in
+> 16.17 seconds headlessly and produced the Local UI's first durable report in
+> 12.16 seconds. This is maintainer validation, not external customer evidence,
+> so the release remains Preview while real installs and material-report proof
+> are collected.
 
 ## Download
 
