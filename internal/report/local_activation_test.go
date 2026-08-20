@@ -41,7 +41,7 @@ func TestLocalActivationTimingRejectsInvalidWindow(t *testing.T) {
 	}
 }
 
-func TestLocalActivationTimingRecoversEarliestLegacySnapshot(t *testing.T) {
+func TestLocalActivationTimingDoesNotSubstituteLegacyAnalyzerWindow(t *testing.T) {
 	ctx := context.Background()
 	store := storage.NewMemoryStore()
 	legacyStart := time.Date(2026, 8, 1, 8, 0, 0, 0, time.UTC)
@@ -60,7 +60,7 @@ func TestLocalActivationTimingRecoversEarliestLegacySnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !timing.StartedAt.Equal(legacyStart) || !timing.CompletedAt.Equal(legacyExecution.FinishedAt) || timing.ElapsedMilliseconds != 70000 || !timing.WithinTarget {
-		t.Fatalf("legacy first report was not recovered: %#v", timing)
+	if !timing.StartedAt.Equal(now) || !timing.CompletedAt.Equal(now.Add(20*time.Minute)) || timing.ElapsedMilliseconds != int64((20*time.Minute)/time.Millisecond) || timing.WithinTarget {
+		t.Fatalf("legacy analyzer timing replaced the real activation window: %#v", timing)
 	}
 }

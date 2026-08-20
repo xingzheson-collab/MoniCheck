@@ -64,3 +64,21 @@ func TestLocalUIExposesExplicitActivationActionsWithoutReportData(t *testing.T) 
 		}
 	}
 }
+
+func TestLocalUILeadsWithEvidenceCompletenessWhenCoverageIsPartial(t *testing.T) {
+	body, err := fs.ReadFile(staticFiles, "static/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(body)
+	for _, required := range []string{
+		"Evidence completeness",
+		"Evaluable coverage:",
+		"before treating evaluable coverage as estate-wide coverage",
+		"coverage_evidence_state",
+	} {
+		if !strings.Contains(script, required) {
+			t.Fatalf("Local UI is missing partial-evidence boundary %q", required)
+		}
+	}
+}

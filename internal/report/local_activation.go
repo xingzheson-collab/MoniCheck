@@ -32,40 +32,6 @@ func SaveLocalActivationTiming(ctx context.Context, store *storage.Store, starte
 	if existing, found, err := LoadLocalActivationTiming(ctx, store); err != nil || found {
 		return existing, err
 	}
-	exports, err := store.ReportExports.List(ctx)
-	if err != nil {
-		return LocalActivationTiming{}, err
-	}
-	var earliest *model.ReportExport
-	for i := range exports {
-		export := &exports[i]
-		if export.Origin != LocalPostureSnapshotOrigin || export.ExecutionID == "" || export.CreatedAt.IsZero() {
-			continue
-		}
-		if earliest == nil || export.CreatedAt.Before(earliest.CreatedAt) {
-			earliest = export
-		}
-	}
-	if earliest != nil && store.Executions != nil {
-		executions, listErr := store.Executions.List(ctx)
-		if listErr != nil {
-			return LocalActivationTiming{}, listErr
-		}
-		for _, execution := range executions {
-			if execution.ID != earliest.ExecutionID || execution.StartedAt.IsZero() {
-				continue
-			}
-			legacyCompletedAt := execution.FinishedAt
-			if legacyCompletedAt.IsZero() {
-				legacyCompletedAt = earliest.CreatedAt
-			}
-			if !legacyCompletedAt.Before(execution.StartedAt) {
-				startedAt = execution.StartedAt
-				completedAt = legacyCompletedAt
-			}
-			break
-		}
-	}
 	startedAt = startedAt.UTC()
 	completedAt = completedAt.UTC()
 	if startedAt.IsZero() || completedAt.IsZero() || completedAt.Before(startedAt) {

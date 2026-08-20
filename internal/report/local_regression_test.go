@@ -3,6 +3,7 @@ package report
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -82,6 +83,37 @@ func TestSaveLocalPostureSnapshotIsExecutionIdempotent(t *testing.T) {
 	regression, err := BuildLocalRegression(ctx, store)
 	if err != nil || regression.State != "BASELINE" || regression.SnapshotCount != 1 {
 		t.Fatalf("expected one baseline snapshot, got %#v err=%v", regression, err)
+	}
+}
+
+func TestLocalFindingIndexCoversObservedRealEnvironmentScale(t *testing.T) {
+	findings := make([]model.Finding, 9461)
+	for index := range findings {
+		findings[index] = model.Finding{
+			ID: model.StableID("finding", strconv.Itoa(index)), Type: "BrokenTarget",
+			Severity: model.SeverityWarning, Status: model.FindingStatusOpen,
+		}
+	}
+	content, err := addLocalFindingIndex(`{}`, findings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	index := readLocalFindingIndex(content)
+	if index == nil || !index.Complete || index.Count != len(findings) || len(index.Items) != len(findings) {
+		t.Fatalf("real-environment Finding index degraded unexpectedly: %#v", index)
+	}
+
+	overLimit := make([]model.Finding, localFindingIndexLimit+1)
+	for item := range overLimit {
+		overLimit[item] = model.Finding{ID: model.StableID("over-limit", strconv.Itoa(item))}
+	}
+	content, err = addLocalFindingIndex(`{}`, overLimit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	index = readLocalFindingIndex(content)
+	if index == nil || index.Complete || index.Count != len(overLimit) || len(index.Items) != 0 {
+		t.Fatalf("bounded over-limit degradation changed: %#v", index)
 	}
 }
 

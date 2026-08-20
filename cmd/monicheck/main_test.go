@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"monicheck/internal/buildinfo"
+	"monicheck/internal/execution"
 )
 
 func TestVersionSupportsTextAndJSONContracts(t *testing.T) {
@@ -70,6 +71,30 @@ func TestConnectorListIncludesEvidenceSources(t *testing.T) {
 	for _, typeName := range []string{"prometheus", "otelcol", "datadog", "newrelic"} {
 		if !strings.Contains(stdout.String(), typeName) {
 			t.Fatalf("missing connector %q", typeName)
+		}
+	}
+}
+
+func TestLocalProgressIsStageSpecificAndCredentialSafe(t *testing.T) {
+	var output bytes.Buffer
+	for _, event := range []execution.ProgressEvent{
+		{Stage: execution.ProgressStageSourceCollection, Total: 1},
+		{Stage: execution.ProgressStageSnapshotPersistence, ResourceCount: 3316, RelationshipCount: 38847},
+		{Stage: execution.ProgressStageInventoryReconciliation},
+		{Stage: execution.ProgressStageAnalysis, Total: 650},
+		{Stage: execution.ProgressStageFindingPersistence, Total: 9461},
+	} {
+		writeLocalProgress(&output, event)
+	}
+	text := output.String()
+	for _, expected := range []string{"Collecting evidence", "3316 resources, 38847 relationships", "Reconciling inventory", "Running 650 analyzers", "Saving 9461 findings"} {
+		if !strings.Contains(text, expected) {
+			t.Fatalf("progress output missing %q: %s", expected, text)
+		}
+	}
+	for _, forbidden := range []string{"source-id", "prometheus.hqlygk.com", "token=", "bearer"} {
+		if strings.Contains(strings.ToLower(text), forbidden) {
+			t.Fatalf("progress output leaked %q: %s", forbidden, text)
 		}
 	}
 }

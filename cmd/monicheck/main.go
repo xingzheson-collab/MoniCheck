@@ -12,8 +12,10 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"monicheck/internal/buildinfo"
+	"monicheck/internal/execution"
 	"monicheck/internal/localruntime"
 	"monicheck/internal/localui"
 	"monicheck/internal/report"
@@ -43,6 +45,7 @@ func main() {
 }
 
 func runLocal(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	commandStartedAt := time.Now().UTC()
 	fs := flag.NewFlagSet("local", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	opts := localruntime.Options{}
@@ -71,7 +74,11 @@ func runLocal(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	runtime, err := localruntime.New(ctx, opts)
+	opts.ActivationStartedAt = commandStartedAt
+	scanCtx := execution.WithProgressReporter(ctx, func(event execution.ProgressEvent) {
+		writeLocalProgress(stderr, event)
+	})
+	runtime, err := localruntime.New(scanCtx, opts)
 	if err != nil {
 		fmt.Fprintf(stderr, "scan failed: %v\n", err)
 		return 1
@@ -102,7 +109,13 @@ func runLocal(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 	}
 	if check {
 		passed := len(regression.RegressedMetrics) == 0
-		result := map[string]any{"passed": passed, "state": regression.State, "snapshot_count": regression.SnapshotCount, "regressed_metrics": regression.RegressedMetrics}
+		elapsed := time.Since(commandStartedAt)
+		result := map[string]any{
+			"contract_version": "local-policy-gate.v1", "passed": passed, "state": regression.State,
+			"snapshot_count": regression.SnapshotCount, "regressed_metrics": regression.RegressedMetrics,
+			"scan_elapsed_milliseconds": elapsed.Milliseconds(), "target_seconds": 900,
+			"within_target": elapsed <= 15*time.Minute,
+		}
 		if format == "json" {
 			body, _ := json.MarshalIndent(result, "", "  ")
 			fmt.Fprintln(stdout, string(body))
@@ -117,6 +130,8 @@ func runLocal(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 		}
 		return 0
 	}
+	elapsed := time.Since(commandStartedAt)
+	fmt.Fprintf(stderr, "First report ready in %s (%s 15m target).\n", localDuration(elapsed), map[bool]string{true: "within", false: "over"}[elapsed <= 15*time.Minute])
 	fmt.Fprintf(stdout, "MoniCheck Local UI: http://%s/ui/static/\nState: %s\n", opts.Listen, opts.StoragePath)
 	server := localui.New(opts.Listen, runtime)
 	if err := server.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
@@ -124,6 +139,28 @@ func runLocal(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 		return 1
 	}
 	return 0
+}
+
+func writeLocalProgress(output io.Writer, event execution.ProgressEvent) {
+	switch event.Stage {
+	case execution.ProgressStageSourceCollection:
+		fmt.Fprintf(output, "Collecting evidence from %d configured source(s)...\n", event.Total)
+	case execution.ProgressStageSnapshotPersistence:
+		fmt.Fprintf(output, "Persisting source snapshot: %d resources, %d relationships...\n", event.ResourceCount, event.RelationshipCount)
+	case execution.ProgressStageInventoryReconciliation:
+		fmt.Fprintln(output, "Reconciling inventory and coverage evidence...")
+	case execution.ProgressStageAnalysis:
+		fmt.Fprintf(output, "Running %d analyzers...\n", event.Total)
+	case execution.ProgressStageFindingPersistence:
+		fmt.Fprintf(output, "Saving %d findings...\n", event.Total)
+	}
+}
+
+func localDuration(value time.Duration) string {
+	if value < time.Second {
+		return value.Round(100 * time.Millisecond).String()
+	}
+	return value.Round(time.Second).String()
 }
 
 func runVersion(args []string, stdout, stderr io.Writer) int {

@@ -21,6 +21,7 @@ import (
 type Options struct {
 	Listen, StoragePath, LogLevel, ConfigPath                      string
 	PrometheusURL, GrafanaURL, AlertmanagerURL, KubernetesManifest string
+	ActivationStartedAt                                            time.Time
 }
 
 type Runtime struct {
@@ -44,6 +45,10 @@ func ValidateOptions(o Options) error {
 }
 
 func New(ctx context.Context, o Options) (*Runtime, error) {
+	started := o.ActivationStartedAt.UTC()
+	if started.IsZero() {
+		started = time.Now().UTC()
+	}
 	store, err := storage.NewFileStore(o.StoragePath)
 	if err != nil {
 		return nil, fmt.Errorf("open local state: %w", err)
@@ -53,7 +58,6 @@ func New(ctx context.Context, o Options) (*Runtime, error) {
 		return nil, err
 	}
 	engine := execution.NewEngine(store, connectors, newRegistry(), logger.New(os.Stderr, o.LogLevel))
-	started := time.Now().UTC()
 	executionResult, err := engine.Bootstrap(ctx)
 	if err != nil {
 		return nil, err
@@ -61,7 +65,9 @@ func New(ctx context.Context, o Options) (*Runtime, error) {
 	if _, err := report.SaveLocalPostureSnapshot(ctx, store, executionResult); err != nil {
 		return nil, err
 	}
-	_, _ = report.SaveLocalActivationTiming(ctx, store, started, time.Now().UTC(), 15*time.Minute)
+	if _, err := report.SaveLocalActivationTiming(ctx, store, started, time.Now().UTC(), 15*time.Minute); err != nil {
+		return nil, err
+	}
 	return &Runtime{Store: store, Engine: engine, Execution: executionResult}, nil
 }
 

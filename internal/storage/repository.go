@@ -129,4 +129,17 @@ type Store struct {
 	FindingOccurrences   FindingOccurrenceRepository
 	CoverageExpectations CoverageExpectationRepository
 	CoverageExceptions   CoverageExceptionRepository
+	runBatch             func(context.Context, func() error) error
+}
+
+// WithinBatch coalesces durable writes when the backing store supports it.
+// Memory stores execute the operation directly.
+func (s *Store) WithinBatch(ctx context.Context, operation func() error) error {
+	if operation == nil {
+		return nil
+	}
+	if s == nil || s.runBatch == nil {
+		return operation()
+	}
+	return s.runBatch(ctx, operation)
 }

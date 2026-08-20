@@ -4,6 +4,16 @@ MoniCheck is a local-first observability governance scanner for self-hosted and 
 
 This public repository is intentionally Local-only. It contains no hosted website, cloud account system, tenant control plane, Fleet management, billing, or managed execution code.
 
+> **Release status:** `v0.6.4` is a Preview repair release. Public `v0.6.3`
+> required 2h59m at roughly 3,300 resources and 39,000 relationships, while its
+> receipt incorrectly measured only the analyzer window. This release batches
+> durable writes, measures the complete command-to-report path, emits bounded
+> progress, keeps the observed 9,461-Finding comparison exact, and leads with
+> evidence completeness when source evidence is partial. The retained real
+> state completes analysis and report persistence in about three seconds, but a
+> fresh same-source scan is still required before the 15-minute target is
+> considered real-scale validated.
+
 ## Download
 
 Prebuilt releases cover both common CPU families. In Go release names,
@@ -39,6 +49,17 @@ monicheck local --config ./monicheck.yaml
 
 See [`examples/local-config/monicheck.example.yaml`](examples/local-config/monicheck.example.yaml). Secret values are never accepted in YAML; `auth` fields reference environment variable names. Multiple instances of the same connector type are isolated by their stable `name`.
 
+For monitoring-gap detection, combine telemetry evidence with an independent
+service inventory. A Prometheus-only scan can assess observed metrics, but
+services inferred from those same metrics cannot prove estate-wide coverage.
+Adding `--kubernetes-manifest` (or a Kubernetes manifest source in the YAML
+configuration) lets MoniCheck compare declared workloads and Services with
+observed monitoring evidence. Add Grafana and Alertmanager sources when
+dashboard and alert coverage should become evaluable instead of `UNKNOWN`.
+Until those independent sources are connected, use evidence completeness as
+the headline result and treat evaluable coverage as a source-bounded
+self-assessment.
+
 Run `monicheck connectors list` to list supported types and telemetry groups. Local configuration supports Prometheus, Thanos, VictoriaMetrics, Mimir, Cortex, Grafana, Loki, Elasticsearch, OpenSearch, Tempo, Jaeger, SkyWalking, Pyroscope, OpenTelemetry Collector, Alertmanager, N9E, Kubernetes manifests, Datadog, and New Relic.
 
 To try MoniCheck without an existing endpoint, start `go run ./examples/prometheus-api-demo` in another terminal and point the Local command at the demo address printed there.
@@ -57,6 +78,11 @@ count as customer evidence.
 The receipt contains only aggregate report timing, counts, Coverage trust, and
 build identity. It excludes credentials, endpoints, resource names, Finding
 evidence, and user or machine identity. Nothing is uploaded automatically.
+
+First-report time means command start through the durable report becoming
+available. Source collection, inventory persistence, reconciliation, analysis,
+Finding persistence, and report persistence are all included. Analyzer runtime
+alone is not first-report time.
 
 For CI, run a single scan:
 
@@ -86,3 +112,9 @@ To hand privacy-safe evidence to an optional private uploader, write the version
 - Privacy-safe `evidence-bundle.v1` export boundary for optional external delivery
 
 Managed deployment and commercial services are maintained separately and are not part of this repository.
+
+The default state path follows the operating-system user configuration
+directory: `~/Library/Application Support/monicheck/local-state.json` on
+macOS, `$XDG_CONFIG_HOME/monicheck/local-state.json` when configured on Linux,
+and otherwise `~/.config/monicheck/local-state.json` on Linux. Use
+`--storage-path` for an explicit location.

@@ -15,7 +15,7 @@ const (
 	LocalPostureSnapshotOrigin = "LOCAL_SCAN"
 	localRegressionContract    = "local-regression.v1"
 	localFindingIndexKey       = "_local_finding_index"
-	localFindingIndexLimit     = 5000
+	localFindingIndexLimit     = 20000
 	localFindingChangeLimit    = 100
 )
 

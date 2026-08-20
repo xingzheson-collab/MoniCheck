@@ -2,6 +2,8 @@ package storage
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -11,6 +13,96 @@ import (
 
 	"monicheck/internal/model"
 )
+
+func TestFileStoreBatchesRealScaleSnapshotIntoOneAtomicCommit(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "monicheck.json")
+	store, err := NewFileStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const resourceCount = 3316
+	const relationshipCount = 38847
+	startedAt := time.Now()
+	err = store.WithinBatch(ctx, func() error {
+		for index := 0; index < resourceCount; index++ {
+			id := fmt.Sprintf("metric-%05d", index)
+			if err := store.Resources.Upsert(ctx, model.Resource{ID: id, Type: model.ResourceTypeMetric, Name: id, Status: model.ResourceStatusActive}); err != nil {
+				return err
+			}
+		}
+		for index := 0; index < relationshipCount; index++ {
+			if err := store.Relationships.Upsert(ctx, model.Relationship{
+				ID:     fmt.Sprintf("relationship-%05d", index),
+				FromID: fmt.Sprintf("metric-%05d", index%resourceCount),
+				ToID:   fmt.Sprintf("metric-%05d", (index+1)%resourceCount),
+				Type:   model.RelationshipUses,
+			}); err != nil {
+				return err
+			}
+		}
+		if _, statErr := os.Stat(path); !errors.Is(statErr, os.ErrNotExist) {
+			return fmt.Errorf("state file was written before the snapshot batch completed: %v", statErr)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(startedAt); elapsed > 15*time.Second {
+		t.Fatalf("real-scale snapshot persistence took %s, want <=15s", elapsed)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("state mode=%#o, want 0600", info.Mode().Perm())
+	}
+
+	reloaded, err := NewFileStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resources, err := reloaded.Resources.List(ctx, ResourceFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	relationships, err := reloaded.Relationships.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resources) != resourceCount || len(relationships) != relationshipCount {
+		t.Fatalf("reloaded resources=%d relationships=%d", len(resources), len(relationships))
+	}
+}
+
+func TestFileStoreBatchFlushesPartialMutationWhenOperationFails(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "monicheck.json")
+	store, err := NewFileStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantErr := errors.New("stop snapshot")
+	err = store.WithinBatch(ctx, func() error {
+		if err := store.Resources.Upsert(ctx, model.Resource{ID: "retained", Type: model.ResourceTypeMetric}); err != nil {
+			return err
+		}
+		return wantErr
+	})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("batch error=%v, want %v", err, wantErr)
+	}
+	reloaded, err := NewFileStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, found, err := reloaded.Resources.Get(ctx, "retained"); err != nil || !found {
+		t.Fatalf("partial mutation was not durably flushed: found=%v err=%v", found, err)
+	}
+}
 
 func TestFileStoreProtectsDetailedLocalEvidence(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "monicheck.json")

@@ -25,6 +25,9 @@ header button{border:1px solid #b8c6c1;background:white;padding:8px 14px;border-
 .metric,.panel{background:white;border:1px solid #dce3e0;border-radius:7px;padding:18px}
 .metric span{display:block;color:#6d7d77;font-size:12px}
 .metric strong{display:block;font-size:28px;margin-top:10px}
+.metric small{display:block;color:#6d7d77;font-size:11px;margin-top:6px;line-height:1.4}
+.metric.evidence{border-color:#d4a72c;background:#fffaf0}
+.next{border-left:3px solid #d4a72c;padding-left:10px;color:#526a61}
 .panel{margin-top:16px;overflow:auto}
 table{width:100%;min-width:760px;border-collapse:collapse;font-size:13px}
 th,td{text-align:left;border-bottom:1px solid #e6ebe9;padding:11px 8px}

@@ -187,34 +187,35 @@ func (e *Engine) Sync(ctx context.Context) error {
 		snapshotID := model.StableID("connector_snapshot", connector.ID(), syncedAt.Format(time.RFC3339Nano))
 		snapshotComplete := !snapshot.Partial
 		snapshot, resourceIDs, relationshipIDs := stampConnectorSnapshot(snapshot, connector.ID(), snapshotID, syncedAt, snapshotComplete)
-		persistFailed := false
-		for _, resource := range snapshot.Resources {
-			if err := e.store.Resources.Upsert(ctx, resource); err != nil {
-				syncErrors = append(syncErrors, fmt.Errorf("sync connector %s: upsert resource %s: %w", connector.ID(), resource.ID, err))
-				persistFailed = true
-				break
-			}
-		}
-		if !persistFailed {
-			for _, relationship := range snapshot.Relationships {
-				if err := e.store.Relationships.Upsert(ctx, relationship); err != nil {
-					syncErrors = append(syncErrors, fmt.Errorf("sync connector %s: upsert relationship %s: %w", connector.ID(), relationship.ID, err))
-					persistFailed = true
-					break
-				}
-			}
-		}
+		emitProgress(ctx, ProgressEvent{
+			Stage:         ProgressStageSnapshotPersistence,
+			ResourceCount: len(snapshot.Resources), RelationshipCount: len(snapshot.Relationships),
+		})
 		orphanedCount := 0
 		removedRelationCount := 0
-		if !persistFailed && !snapshot.Partial {
-			orphanedCount, removedRelationCount, err = e.reconcileConnectorSnapshot(ctx, connector.ID(), snapshotID, resourceIDs, relationshipIDs, syncedAt)
-			if err != nil {
-				syncErrors = append(syncErrors, fmt.Errorf("sync connector %s: reconcile snapshot: %w", connector.ID(), err))
-				persistFailed = true
+		persistErr := e.store.WithinBatch(ctx, func() error {
+			for _, resource := range snapshot.Resources {
+				if err := e.store.Resources.Upsert(ctx, resource); err != nil {
+					return fmt.Errorf("upsert resource %s: %w", resource.ID, err)
+				}
 			}
-		}
+			for _, relationship := range snapshot.Relationships {
+				if err := e.store.Relationships.Upsert(ctx, relationship); err != nil {
+					return fmt.Errorf("upsert relationship %s: %w", relationship.ID, err)
+				}
+			}
+			if !snapshot.Partial {
+				var reconcileErr error
+				orphanedCount, removedRelationCount, reconcileErr = e.reconcileConnectorSnapshot(ctx, connector.ID(), snapshotID, resourceIDs, relationshipIDs, syncedAt)
+				if reconcileErr != nil {
+					return fmt.Errorf("reconcile snapshot: %w", reconcileErr)
+				}
+			}
+			return nil
+		})
 		finishedAt := time.Now().UTC()
-		if persistFailed {
+		if persistErr != nil {
+			syncErrors = append(syncErrors, fmt.Errorf("sync connector %s: %w", connector.ID(), persistErr))
 			e.recordConnectorStatus(model.ConnectorStatus{
 				ID: connector.ID(), Name: connector.Name(), Status: model.ExecutionStatusFailed,
 				ResourceCount: len(snapshot.Resources), RelationshipCount: len(snapshot.Relationships),
@@ -242,11 +243,18 @@ func (e *Engine) Sync(ctx context.Context) error {
 			Diagnostics:          appendSnapshotDiagnostics(snapshot.Diagnostics, contract.SnapshotDiagnostic(validation)),
 		})
 	}
-	if err := e.reconcileDerivedServices(ctx); err != nil {
-		syncErrors = append(syncErrors, fmt.Errorf("reconcile derived services: %w", err))
-	}
-	if err := e.reconcileKubernetesRuntimeCoverage(ctx); err != nil {
-		syncErrors = append(syncErrors, fmt.Errorf("reconcile kubernetes runtime coverage: %w", err))
+	emitProgress(ctx, ProgressEvent{Stage: ProgressStageInventoryReconciliation})
+	if err := e.store.WithinBatch(ctx, func() error {
+		var reconciliationErrors []error
+		if err := e.reconcileDerivedServices(ctx); err != nil {
+			reconciliationErrors = append(reconciliationErrors, fmt.Errorf("reconcile derived services: %w", err))
+		}
+		if err := e.reconcileKubernetesRuntimeCoverage(ctx); err != nil {
+			reconciliationErrors = append(reconciliationErrors, fmt.Errorf("reconcile kubernetes runtime coverage: %w", err))
+		}
+		return errors.Join(reconciliationErrors...)
+	}); err != nil {
+		syncErrors = append(syncErrors, err)
 	}
 	if err := errors.Join(syncErrors...); err != nil {
 		return &ConnectorSyncError{err: err}
@@ -272,6 +280,7 @@ func (e *Engine) fetchConnectorSnapshots(ctx context.Context, connectors []conne
 		workerCount = len(connectors)
 	}
 	e.logger.Info(ctx, "sync connector batch", "connector_count", len(connectors), "worker_count", workerCount)
+	emitProgress(ctx, ProgressEvent{Stage: ProgressStageSourceCollection, Total: len(connectors)})
 
 	jobs := make(chan int, len(connectors))
 	for index := range connectors {
@@ -671,30 +680,41 @@ func (e *Engine) RunAnalyzers(ctx context.Context) (model.ExecutionResult, error
 	}
 
 	items := e.analyzers.List()
+	emitProgress(ctx, ProgressEvent{Stage: ProgressStageAnalysis, Total: len(items)})
 	executions := e.executeAnalyzerBatch(ctx, items, resourceGraph, e.analyzerConfigSnapshot())
 	var runErrors []error
 	waivers, waiverErr := e.listWaivers(ctx)
 	if waiverErr != nil {
 		runErrors = append(runErrors, fmt.Errorf("list waivers: %w", waiverErr))
 	}
+	totalFindings := 0
 	for _, execution := range executions {
-		item := execution.analyzer
-		if execution.err != nil {
-			runErrors = append(runErrors, fmt.Errorf("run analyzer %s: %w", item.ID(), execution.err))
-			continue
+		totalFindings += len(execution.findings)
+	}
+	emitProgress(ctx, ProgressEvent{Stage: ProgressStageFindingPersistence, Total: totalFindings})
+	if err := e.store.WithinBatch(ctx, func() error {
+		for _, execution := range executions {
+			item := execution.analyzer
+			if execution.err != nil {
+				runErrors = append(runErrors, fmt.Errorf("run analyzer %s: %w", item.ID(), execution.err))
+				continue
+			}
+			findings := waiverpkg.Apply(execution.findings, waivers, startedAt)
+			findings, reconcileErr := e.reconcileOccurrences(ctx, item.ID(), findings, startedAt)
+			if reconcileErr != nil {
+				runErrors = append(runErrors, fmt.Errorf("reconcile occurrences for analyzer %s: %w", item.ID(), reconcileErr))
+				continue
+			}
+			if replaceErr := e.store.Findings.ReplaceOpenByAnalyzer(ctx, item.ID(), findings); replaceErr != nil {
+				runErrors = append(runErrors, fmt.Errorf("store findings for analyzer %s: %w", item.ID(), replaceErr))
+				continue
+			}
+			result.AnalyzerIDs = append(result.AnalyzerIDs, item.ID())
+			result.FindingCount += len(execution.findings)
 		}
-		findings := waiverpkg.Apply(execution.findings, waivers, startedAt)
-		findings, err = e.reconcileOccurrences(ctx, item.ID(), findings, startedAt)
-		if err != nil {
-			runErrors = append(runErrors, fmt.Errorf("reconcile occurrences for analyzer %s: %w", item.ID(), err))
-			continue
-		}
-		if err := e.store.Findings.ReplaceOpenByAnalyzer(ctx, item.ID(), findings); err != nil {
-			runErrors = append(runErrors, fmt.Errorf("store findings for analyzer %s: %w", item.ID(), err))
-			continue
-		}
-		result.AnalyzerIDs = append(result.AnalyzerIDs, item.ID())
-		result.FindingCount += len(execution.findings)
+		return nil
+	}); err != nil {
+		runErrors = append(runErrors, fmt.Errorf("persist analyzer results: %w", err))
 	}
 
 	result.FinishedAt = time.Now().UTC()

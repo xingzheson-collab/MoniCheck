@@ -15,6 +15,9 @@ import (
 type fileStore struct {
 	path                 string
 	mu                   sync.Mutex
+	batchMu              sync.Mutex
+	batchActive          bool
+	batchDirty           bool
 	resources            *MemoryResourceRepository
 	relationships        *MemoryRelationshipRepository
 	findings             *MemoryFindingRepository
@@ -90,6 +93,7 @@ func NewFileStoreWithAPIAuditRetention(path string, apiAuditRetention int) (*Sto
 		FindingOccurrences:   &fileFindingOccurrenceRepository{inner: fs.findingOccurrences, persist: fs.persist},
 		CoverageExpectations: &fileCoverageExpectationRepository{inner: fs.coverageExpectations, persist: fs.persist},
 		CoverageExceptions:   &fileCoverageExceptionRepository{inner: fs.coverageExceptions, persist: fs.persist},
+		runBatch:             fs.withinBatch,
 	}, nil
 }
 
@@ -178,6 +182,42 @@ func (s *fileStore) load(ctx context.Context) error {
 func (s *fileStore) persist() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.batchActive {
+		s.batchDirty = true
+		return nil
+	}
+	return s.persistLocked()
+}
+
+func (s *fileStore) withinBatch(ctx context.Context, operation func() error) (returnErr error) {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.batchMu.Lock()
+	defer s.batchMu.Unlock()
+
+	s.mu.Lock()
+	s.batchActive = true
+	s.batchDirty = false
+	s.mu.Unlock()
+
+	defer func() {
+		s.mu.Lock()
+		dirty := s.batchDirty
+		s.batchActive = false
+		s.batchDirty = false
+		var persistErr error
+		if dirty {
+			persistErr = s.persistLocked()
+		}
+		s.mu.Unlock()
+		returnErr = errors.Join(returnErr, persistErr)
+	}()
+
+	return operation()
+}
+
+func (s *fileStore) persistLocked() error {
 
 	ctx := context.Background()
 	resources, err := s.resources.List(ctx, ResourceFilter{})

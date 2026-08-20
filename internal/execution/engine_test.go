@@ -204,6 +204,33 @@ func TestEngineBootstrap(t *testing.T) {
 	}
 }
 
+func TestEngineReportsCredentialSafeBootstrapStages(t *testing.T) {
+	store := storage.NewMemoryStore()
+	engine := NewEngine(store, []connector.Connector{connector.NewSampleConnector()}, analyzer.NewRegistry(), logger.New(io.Discard, "error"))
+	events := make([]ProgressEvent, 0, 5)
+	ctx := WithProgressReporter(context.Background(), func(event ProgressEvent) {
+		events = append(events, event)
+	})
+	if _, err := engine.Bootstrap(ctx); err != nil {
+		t.Fatal(err)
+	}
+	stages := map[string]bool{}
+	for _, event := range events {
+		stages[event.Stage] = true
+	}
+	for _, stage := range []string{
+		ProgressStageSourceCollection,
+		ProgressStageSnapshotPersistence,
+		ProgressStageInventoryReconciliation,
+		ProgressStageAnalysis,
+		ProgressStageFindingPersistence,
+	} {
+		if !stages[stage] {
+			t.Fatalf("missing progress stage %s in %#v", stage, events)
+		}
+	}
+}
+
 func TestEngineRejectsInvalidConnectorSnapshot(t *testing.T) {
 	ctx := context.Background()
 	store := storage.NewMemoryStore()
