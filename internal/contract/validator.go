@@ -29,8 +29,7 @@ func ValidateSnapshot(snapshot connector.Snapshot) ValidationResult {
 	resourceIDs := map[string]bool{}
 	relationshipIDs := map[string]bool{}
 
-	for index, resource := range snapshot.Resources {
-		entity := fmt.Sprintf("resources[%d]", index)
+	validateResource := func(resource model.Resource, entity string) {
 		if strings.TrimSpace(resource.ID) == "" {
 			result.add("MissingField", entity, "id", "resource id is required")
 		}
@@ -56,6 +55,12 @@ func ValidateSnapshot(snapshot connector.Snapshot) ValidationResult {
 		if resource.Status == "" {
 			result.add("MissingField", entity, "status", "resource status is required")
 		}
+	}
+	for index, resource := range snapshot.Resources {
+		validateResource(resource, fmt.Sprintf("resources[%d]", index))
+	}
+	for index, resource := range snapshot.References {
+		validateResource(resource, fmt.Sprintf("references[%d]", index))
 	}
 
 	for index, relationship := range snapshot.Relationships {

@@ -959,6 +959,9 @@ func assertRelationshipByName(t *testing.T, snapshot Snapshot, relationshipType 
 	for _, resource := range snapshot.Resources {
 		resources[resource.ID] = resource
 	}
+	for _, resource := range snapshot.References {
+		resources[resource.ID] = resource
+	}
 	for _, relationship := range snapshot.Relationships {
 		from := resources[relationship.FromID]
 		to := resources[relationship.ToID]
@@ -974,6 +977,9 @@ func assertDerivedMetricRelationship(t *testing.T, snapshot Snapshot, inputMetri
 
 	resources := make(map[string]model.Resource)
 	for _, resource := range snapshot.Resources {
+		resources[resource.ID] = resource
+	}
+	for _, resource := range snapshot.References {
 		resources[resource.ID] = resource
 	}
 	for _, relationship := range snapshot.Relationships {
@@ -994,6 +1000,9 @@ func assertRelationship(t *testing.T, snapshot Snapshot, relationshipType model.
 
 	resources := make(map[string]model.Resource)
 	for _, resource := range snapshot.Resources {
+		resources[resource.ID] = resource
+	}
+	for _, resource := range snapshot.References {
 		resources[resource.ID] = resource
 	}
 	for _, relationship := range snapshot.Relationships {

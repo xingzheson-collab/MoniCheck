@@ -108,6 +108,7 @@ func EnrichBusinessServices(snapshot Snapshot, now time.Time) Snapshot {
 
 	enriched := Snapshot{
 		Resources:     make([]model.Resource, 0, len(resourcesByID)),
+		References:    append([]model.Resource(nil), snapshot.References...),
 		Relationships: make([]model.Relationship, 0, len(relationshipsByID)),
 		Diagnostics:   append([]model.Diagnostic(nil), snapshot.Diagnostics...),
 		Partial:       snapshot.Partial,

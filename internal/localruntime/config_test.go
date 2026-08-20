@@ -2,12 +2,15 @@ package localruntime
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"monicheck/internal/connector"
+	"monicheck/internal/contract"
 	"monicheck/internal/model"
 )
 
@@ -51,13 +54,22 @@ func (c staticConnector) Name() string                                     { ret
 func (c staticConnector) Sync(context.Context) (connector.Snapshot, error) { return c.snapshot, nil }
 
 func TestNamespacedGrafanaKeepsCanonicalPrometheusMetricsExternal(t *testing.T) {
+	now := time.Now().UTC()
 	metricID := model.StableID("metric", "prometheus", "https://prometheus.test", "metric:http_requests_total")
 	panelID := "panel-1"
 	wrapped := namespaceConnector(staticConnector{id: "grafana", snapshot: connector.Snapshot{
 		Resources: []model.Resource{
-			{ID: panelID, Type: model.ResourceTypePanel, Source: model.SourceInfo{System: "grafana"}},
-			{ID: metricID, Type: model.ResourceTypeMetric, Source: model.SourceInfo{System: "prometheus", Instance: "https://prometheus.test"}},
+			{
+				ID: panelID, Type: model.ResourceTypePanel, Name: "Requests", UID: panelID,
+				Source: model.SourceInfo{System: "grafana", Instance: "https://grafana.test", ExternalID: "panel:1"},
+				Status: model.ResourceStatusActive, CreatedAt: now, UpdatedAt: now,
+			},
 		},
+		References: []model.Resource{{
+			ID: metricID, Type: model.ResourceTypeMetric, Name: "http_requests_total", UID: metricID,
+			Source: model.SourceInfo{System: "prometheus", Instance: "https://prometheus.test", ExternalID: "metric:http_requests_total"},
+			Status: model.ResourceStatusActive, CreatedAt: now, UpdatedAt: now,
+		}},
 		Relationships: []model.Relationship{{ID: "uses", FromID: panelID, ToID: metricID, Type: model.RelationshipUses}},
 		Diagnostics:   []model.Diagnostic{{ID: "grafana_prometheus_datasource_link", Status: model.ExecutionStatusSucceeded}},
 	}}, "shared")
@@ -68,8 +80,60 @@ func TestNamespacedGrafanaKeepsCanonicalPrometheusMetricsExternal(t *testing.T) 
 	if len(snapshot.Resources) != 1 || snapshot.Resources[0].Type != model.ResourceTypePanel {
 		t.Fatalf("Grafana snapshot overwrote canonical Prometheus Metric evidence: %#v", snapshot.Resources)
 	}
+	if len(snapshot.References) != 1 || snapshot.References[0].ID != metricID {
+		t.Fatalf("canonical Prometheus Metric was not retained as a snapshot reference: %#v", snapshot.References)
+	}
 	if len(snapshot.Relationships) != 1 || snapshot.Relationships[0].ToID != metricID || snapshot.Relationships[0].FromID == panelID {
 		t.Fatalf("cross-source Metric relationship was not preserved: %#v", snapshot.Relationships)
+	}
+	if validation := contract.ValidateSnapshot(snapshot); !validation.Valid {
+		t.Fatalf("cross-source Grafana snapshot violates the connector contract: %#v", validation.Violations)
+	}
+}
+
+func TestNamespacedSharedGrafanaTopologyRemainsContractComplete(t *testing.T) {
+	now := time.Now().UTC()
+	metricID := model.StableID("metric", "prometheus", "https://prometheus.test", "metric:node_cpu_seconds_total")
+	metric := model.Resource{
+		ID: metricID, Type: model.ResourceTypeMetric, Name: "node_cpu_seconds_total", UID: metricID,
+		Source: model.SourceInfo{System: "prometheus", Instance: "https://prometheus.test", ExternalID: "metric:node_cpu_seconds_total"},
+		Status: model.ResourceStatusActive, CreatedAt: now, UpdatedAt: now,
+	}
+	resources := make([]model.Resource, 0, 185)
+	for index := 0; index < 39; index++ {
+		id := fmt.Sprintf("datasource-%d", index)
+		resources = append(resources, model.Resource{
+			ID: id, Type: model.ResourceTypeDatasource, Name: id, UID: id,
+			Source: model.SourceInfo{System: "grafana", Instance: "https://grafana.test", ExternalID: id},
+			Status: model.ResourceStatusActive, CreatedAt: now, UpdatedAt: now,
+		})
+	}
+	relationships := make([]model.Relationship, 0, 146)
+	for index := 0; index < 146; index++ {
+		id := fmt.Sprintf("panel-%d", index)
+		resources = append(resources, model.Resource{
+			ID: id, Type: model.ResourceTypePanel, Name: id, UID: id,
+			Source: model.SourceInfo{System: "grafana", Instance: "https://grafana.test", ExternalID: id},
+			Status: model.ResourceStatusActive, CreatedAt: now, UpdatedAt: now,
+		})
+		relationships = append(relationships, model.Relationship{
+			ID: fmt.Sprintf("uses-%d", index), FromID: id, ToID: metricID, Type: model.RelationshipUses,
+		})
+	}
+
+	wrapped := namespaceConnector(staticConnector{id: "grafana", snapshot: connector.Snapshot{
+		Resources: resources, References: []model.Resource{metric}, Relationships: relationships,
+		Diagnostics: []model.Diagnostic{{ID: "grafana_prometheus_datasource_link", Status: model.ExecutionStatusSucceeded}},
+	}}, "shared-enterprise")
+	snapshot, err := wrapped.Sync(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Resources) != 185 || len(snapshot.References) != 1 || len(snapshot.Relationships) != 146 {
+		t.Fatalf("unexpected shared topology size: resources=%d references=%d relationships=%d", len(snapshot.Resources), len(snapshot.References), len(snapshot.Relationships))
+	}
+	if validation := contract.ValidateSnapshot(snapshot); !validation.Valid {
+		t.Fatalf("shared Grafana topology violates the connector contract: %#v", validation.Violations)
 	}
 }
 
@@ -123,6 +187,8 @@ func TestEveryCatalogConnectorBuilds(t *testing.T) {
 		switch item.Type {
 		case "datadog":
 			spec.Auth.APIKeyEnv, spec.Auth.ApplicationKeyEnv = "TEST_API_KEY", "TEST_APP_KEY"
+		case "grafana":
+			spec.Auth.APIKeyEnv = "TEST_API_KEY"
 		case "newrelic":
 			spec.AccountID, spec.Auth.UserKeyEnv = 1234, "TEST_USER_KEY"
 		case "otelcol":

@@ -72,7 +72,10 @@ func TestGrafanaConnectorSync(t *testing.T) {
 	assertResourceCount(t, snapshot, model.ResourceTypeDashboard, 1)
 	assertResourceCount(t, snapshot, model.ResourceTypeFolder, 1)
 	assertResourceCount(t, snapshot, model.ResourceTypePanel, 1)
-	assertResourceCount(t, snapshot, model.ResourceTypeMetric, 2)
+	assertResourceCount(t, snapshot, model.ResourceTypeMetric, 0)
+	if len(snapshot.References) != 2 {
+		t.Fatalf("expected 2 canonical Prometheus Metric references, got %#v", snapshot.References)
+	}
 	assertResourceCount(t, snapshot, model.ResourceTypeInstance, 1)
 	assertRelationship(t, snapshot, model.RelationshipBelongsTo, model.ResourceTypePanel, model.ResourceTypeDashboard)
 	assertRelationship(t, snapshot, model.RelationshipBelongsTo, model.ResourceTypeDashboard, model.ResourceTypeFolder)
@@ -190,6 +193,34 @@ func TestGrafanaConnectorUsesBasicAuthForPrivateIngress(t *testing.T) {
 	}
 	if snapshot.Partial {
 		t.Fatalf("expected complete Basic Auth sync, diagnostics=%#v", snapshot.Diagnostics)
+	}
+}
+
+func TestGrafanaConnectorUsesAPIKeyAsBearerToken(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer grafana-api-key" {
+			t.Errorf("Authorization = %q", got)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if got := r.Header.Get("X-API-Key"); got != "" {
+			t.Errorf("Grafana request must not use X-API-Key, got %q", got)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	connector, err := NewGrafanaConnectorWithOptions(server.URL, HTTPOptions{APIKey: "grafana-api-key"})
+	if err != nil {
+		t.Fatalf("new connector: %v", err)
+	}
+	response, err := connector.client.Get(server.URL)
+	if err != nil {
+		t.Fatalf("authenticated request: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", response.StatusCode)
 	}
 }
 
@@ -1420,7 +1451,7 @@ func assertDatasourceHealth(t *testing.T, snapshot Snapshot, uid, health, evalua
 func assertMetric(t *testing.T, snapshot Snapshot, name string) {
 	t.Helper()
 
-	for _, resource := range snapshot.Resources {
+	for _, resource := range append(snapshot.Resources, snapshot.References...) {
 		if resource.Type == model.ResourceTypeMetric && resource.Name == name {
 			return
 		}
@@ -1431,7 +1462,7 @@ func assertMetric(t *testing.T, snapshot Snapshot, name string) {
 func assertNoMetric(t *testing.T, snapshot Snapshot, name string) {
 	t.Helper()
 
-	for _, resource := range snapshot.Resources {
+	for _, resource := range append(snapshot.Resources, snapshot.References...) {
 		if resource.Type == model.ResourceTypeMetric && resource.Name == name {
 			t.Fatalf("expected no metric resource %q", name)
 		}
@@ -1446,7 +1477,7 @@ func assertMetricInstance(t *testing.T, snapshot Snapshot, expected string) {
 func assertMetricInstanceForName(t *testing.T, snapshot Snapshot, metricName string, expected string) {
 	t.Helper()
 
-	for _, resource := range snapshot.Resources {
+	for _, resource := range append(snapshot.Resources, snapshot.References...) {
 		if resource.Type == model.ResourceTypeMetric && resource.Name == metricName {
 			if resource.Source.Instance != expected {
 				t.Fatalf("expected metric instance %q, got %q", expected, resource.Source.Instance)

@@ -10,6 +10,7 @@ import (
 
 type Snapshot struct {
 	Resources     []model.Resource
+	References    []model.Resource
 	Relationships []model.Relationship
 	Diagnostics   []model.Diagnostic
 	Partial       bool

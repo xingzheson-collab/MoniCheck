@@ -74,6 +74,12 @@ func NewGrafanaConnectorWithNamespace(baseURL string, namespace string, options 
 	if options.Timeout <= 0 {
 		options.Timeout = 15 * time.Second
 	}
+	apiKey := strings.TrimSpace(options.BearerToken)
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(options.APIKey)
+	}
+	options.BearerToken = apiKey
+	options.APIKey = ""
 	client, err := NewHTTPClient(options)
 	if err != nil {
 		return nil, err
@@ -84,7 +90,7 @@ func NewGrafanaConnectorWithNamespace(baseURL string, namespace string, options 
 	}
 	return &GrafanaConnector{
 		baseURL:                 baseURL,
-		apiKey:                  strings.TrimSpace(options.BearerToken),
+		apiKey:                  apiKey,
 		namespace:               namespace,
 		client:                  client,
 		dashboardSearchPageSize: defaultGrafanaDashboardSearchPageSize,
@@ -351,12 +357,21 @@ func (c *GrafanaConnector) Sync(ctx context.Context) (Snapshot, error) {
 	addGrafanaNotificationTemplates(resourceByID, &relationships, notificationTemplates, notificationTemplatesAvailable, contactPoints, c.baseURL, now)
 
 	resources := make([]model.Resource, 0, len(resourceByID))
+	references := make([]model.Resource, 0)
 	sanitizeGrafanaResourceURLs(resourceByID)
 	for _, resource := range resourceByID {
+		if resource.Type == model.ResourceTypeMetric &&
+			resource.Source.System == prometheusSystem &&
+			c.prometheusMetricInstance != "" &&
+			strings.TrimRight(resource.Source.Instance, "/") == c.prometheusMetricInstance {
+			references = append(references, resource)
+			continue
+		}
 		resources = append(resources, resource)
 	}
 	return Snapshot{
 		Resources:     resources,
+		References:    references,
 		Relationships: relationships,
 		Diagnostics:   diagnostics,
 		Partial:       diagnosticsHaveFailures(diagnostics),

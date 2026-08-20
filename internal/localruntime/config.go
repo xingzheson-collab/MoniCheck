@@ -175,6 +175,13 @@ func buildConnector(spec ConnectorSpec) (connector.Connector, error) {
 		options.Headers = tenantHeader(options.Headers, spec.TenantID)
 		return connector.NewLokiConnectorWithOptions(spec.URL, options)
 	case "grafana":
+		apiKey, err := envSecret(spec.Auth.APIKeyEnv)
+		if err != nil {
+			return nil, err
+		}
+		if options.BearerToken == "" {
+			options.BearerToken = apiKey
+		}
 		return connector.NewGrafanaConnectorWithNamespace(spec.URL, spec.Namespace, options)
 	case "alertmanager":
 		return connector.NewAlertmanagerConnectorWithOptions(spec.URL, options)
@@ -328,16 +335,15 @@ func (c *namespacedConnector) Sync(ctx context.Context) (connector.Snapshot, err
 	if err != nil {
 		return snapshot, err
 	}
-	externalPrometheusMetrics := c.base.ID() == "grafana" && snapshotHasDiagnostic(snapshot, "grafana_prometheus_datasource_link")
 	idMap := make(map[string]string, len(snapshot.Resources))
 	resources := make([]model.Resource, 0, len(snapshot.Resources))
+	references := append([]model.Resource(nil), snapshot.References...)
+	for _, reference := range snapshot.References {
+		idMap[reference.ID] = reference.ID
+	}
 	for index := range snapshot.Resources {
 		resource := snapshot.Resources[index]
 		old := resource.ID
-		if externalPrometheusMetrics && resource.Type == model.ResourceTypeMetric && resource.Source.System == "prometheus" {
-			idMap[old] = old
-			continue
-		}
 		next := model.StableID("local_connector_resource", c.id, old)
 		idMap[old] = next
 		resource.ID = next
@@ -345,6 +351,7 @@ func (c *namespacedConnector) Sync(ctx context.Context) (connector.Snapshot, err
 		resources = append(resources, resource)
 	}
 	snapshot.Resources = resources
+	snapshot.References = references
 	for index := range snapshot.Relationships {
 		relation := &snapshot.Relationships[index]
 		relation.ID = model.StableID("local_connector_relationship", c.id, relation.ID)
@@ -359,13 +366,4 @@ func (c *namespacedConnector) Sync(ctx context.Context) (connector.Snapshot, err
 		snapshot.Diagnostics[index].ID = c.id + ":" + snapshot.Diagnostics[index].ID
 	}
 	return snapshot, nil
-}
-
-func snapshotHasDiagnostic(snapshot connector.Snapshot, id string) bool {
-	for _, diagnostic := range snapshot.Diagnostics {
-		if diagnostic.ID == id {
-			return true
-		}
-	}
-	return false
 }

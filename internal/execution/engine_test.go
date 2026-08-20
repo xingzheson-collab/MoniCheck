@@ -265,6 +265,46 @@ func TestEngineRejectsInvalidConnectorSnapshot(t *testing.T) {
 	}
 }
 
+func TestEnginePersistsCrossConnectorRelationshipWithoutOverwritingReferencedResource(t *testing.T) {
+	ctx := context.Background()
+	store := storage.NewMemoryStore()
+	metric := connectorOwnedTestResource("prometheus", "metric:http_requests_total", model.ResourceTypeMetric)
+	metric.Metadata["prometheus_evidence"] = "retained"
+	panel := connectorOwnedTestResource("grafana", "panel:requests", model.ResourceTypePanel)
+	relationship := model.Relationship{
+		ID:     model.StableID(panel.ID, string(model.RelationshipUses), metric.ID),
+		FromID: panel.ID, ToID: metric.ID, Type: model.RelationshipUses,
+	}
+	engine := NewEngine(store, []connector.Connector{
+		&sequenceConnector{id: "prometheus", snapshots: []connector.Snapshot{{Resources: []model.Resource{metric}}}},
+		&sequenceConnector{id: "grafana", snapshots: []connector.Snapshot{{
+			Resources: []model.Resource{panel}, References: []model.Resource{metric},
+			Relationships: []model.Relationship{relationship},
+		}}},
+	}, analyzer.NewRegistry(), logger.New(io.Discard, "error"))
+
+	if err := engine.Sync(ctx); err != nil {
+		t.Fatalf("sync cross-source snapshot: %v", err)
+	}
+	storedMetric, found, err := store.Resources.Get(ctx, metric.ID)
+	if err != nil || !found || storedMetric.Metadata["prometheus_evidence"] != "retained" {
+		t.Fatalf("referenced Prometheus Metric was overwritten: %#v found=%v err=%v", storedMetric, found, err)
+	}
+	storedRelationships, err := store.Relationships.List(ctx)
+	if err != nil {
+		t.Fatalf("list relationships: %v", err)
+	}
+	foundRelationship := false
+	for _, stored := range storedRelationships {
+		if stored.ID == relationship.ID && stored.FromID == panel.ID && stored.ToID == metric.ID {
+			foundRelationship = true
+		}
+	}
+	if !foundRelationship {
+		t.Fatalf("cross-source relationship was not persisted: %#v", storedRelationships)
+	}
+}
+
 func TestEngineReconcilesMissingResourcesAndRestoresThem(t *testing.T) {
 	ctx := context.Background()
 	store := storage.NewMemoryStore()

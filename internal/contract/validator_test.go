@@ -40,6 +40,30 @@ func TestValidateSnapshot(t *testing.T) {
 	}
 }
 
+func TestValidateSnapshotAcceptsRelationshipToReadOnlyReference(t *testing.T) {
+	now := time.Now().UTC()
+	panel := model.Resource{
+		ID: "panel-1", Type: model.ResourceTypePanel, Name: "Requests", UID: "panel-1",
+		Source: model.SourceInfo{System: "grafana", Instance: "local", ExternalID: "panel:1"},
+		Status: model.ResourceStatusActive, CreatedAt: now, UpdatedAt: now,
+	}
+	metric := model.Resource{
+		ID: "metric-1", Type: model.ResourceTypeMetric, Name: "http_requests_total", UID: "metric-1",
+		Source: model.SourceInfo{System: "prometheus", Instance: "local", ExternalID: "metric:http_requests_total"},
+		Status: model.ResourceStatusActive, CreatedAt: now, UpdatedAt: now,
+	}
+	result := ValidateSnapshot(connector.Snapshot{
+		Resources:  []model.Resource{panel},
+		References: []model.Resource{metric},
+		Relationships: []model.Relationship{{
+			ID: "uses", FromID: panel.ID, ToID: metric.ID, Type: model.RelationshipUses,
+		}},
+	})
+	if !result.Valid {
+		t.Fatalf("expected reference-complete snapshot, got %#v", result.Violations)
+	}
+}
+
 func TestValidateSnapshotRejectsMissingFieldsAndInvalidReferences(t *testing.T) {
 	result := ValidateSnapshot(connector.Snapshot{
 		Resources: []model.Resource{

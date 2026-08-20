@@ -4,15 +4,14 @@ MoniCheck is a local-first observability governance scanner for self-hosted and 
 
 This public repository is intentionally Local-only. It contains no hosted website, cloud account system, tenant control plane, Fleet management, billing, or managed execution code.
 
-> **Release status:** `v0.6.5` is a Preview correctness release. It retains the
-> `v0.6.4` real-scale persistence and timing repair, which completed a maintainer
-> same-source scan in 16.17 seconds headlessly and produced the Local UI's first
-> durable report in 12.16 seconds. It additionally prevents shared Grafana
-> internal URLs from silently splitting dashboard metrics from their configured
-> Prometheus source: bind with `--prometheus-datasource-uid`, or rely on exact
-> normalized URL matching. Empty references use Grafana's declared default
-> datasource, and unmatched identity is reported as WARNING. This remains
-> maintainer validation, not external customer evidence.
+> **Release status:** `v0.6.6` is a Preview shared-Grafana repair. A maintainer
+> scan found that `v0.6.5` ignored `MONICHECK_GRAFANA_API_KEY` and rejected
+> correctly bound Panel-to-Metric relationships during snapshot validation.
+> This release sends Grafana API keys as Bearer tokens and validates bound
+> Prometheus Metrics as read-only cross-source references without overwriting
+> their owning inventory. The repair passed a privacy-safe 39-datasource,
+> 146-panel topology fixture, but still requires a fresh external or maintainer
+> run against the original private source.
 
 ## Download
 
@@ -27,7 +26,7 @@ Prebuilt releases cover both common CPU families. In Go release names,
 | macOS | `arm64` (Apple silicon) | `darwin_arm64.tar.gz` |
 
 Download the matching archive and `SHA256SUMS` from the
-[v0.6.5 Preview Release](https://github.com/xingzheson-collab/MoniCheck/releases/tag/v0.6.5).
+[v0.6.6 Preview Release](https://github.com/xingzheson-collab/MoniCheck/releases/tag/v0.6.6).
 Verify the checksum before running the binary.
 
 ## Quick start

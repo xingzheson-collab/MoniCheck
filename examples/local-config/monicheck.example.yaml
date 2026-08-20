@@ -15,7 +15,7 @@ connectors:
     url: https://grafana.example.com
     namespace: production
     auth:
-      bearer_token_env: GRAFANA_TOKEN
+      api_key_env: GRAFANA_API_KEY
 
   - type: otelcol
     name: gateway

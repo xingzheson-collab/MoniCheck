@@ -40,6 +40,15 @@ func TestEnrichBusinessServices(t *testing.T) {
 	assertResourceCount(t, snapshot, model.ResourceTypeService, 3)
 }
 
+func TestEnrichBusinessServicesPreservesExternalReferences(t *testing.T) {
+	reference := testResource("metric-prometheus", model.ResourceTypeMetric, "http_requests_total", nil, nil)
+	reference.Source.System = prometheusSystem
+	snapshot := EnrichBusinessServices(Snapshot{References: []model.Resource{reference}}, time.Unix(0, 0).UTC())
+	if len(snapshot.References) != 1 || snapshot.References[0].ID != reference.ID {
+		t.Fatalf("external references were not preserved: %#v", snapshot.References)
+	}
+}
+
 func TestEnrichBusinessServicesInfersPrometheusJobWithExplicitProvenance(t *testing.T) {
 	now := time.Unix(0, 0).UTC()
 	checkout := testResource("job-checkout", model.ResourceTypeJob, "checkout", nil, nil)
