@@ -27,7 +27,7 @@ Prebuilt releases cover both common CPU families. In Go release names,
 | macOS | `arm64` (Apple silicon) | `darwin_arm64.tar.gz` |
 
 Download the matching archive and `SHA256SUMS` from the
-[latest GitHub Release](https://github.com/xingzheson-collab/MoniCheck/releases/latest).
+[v0.6.4 Preview Release](https://github.com/xingzheson-collab/MoniCheck/releases/tag/v0.6.4).
 Verify the checksum before running the binary.
 
 ## Quick start
