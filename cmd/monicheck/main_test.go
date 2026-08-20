@@ -75,6 +75,17 @@ func TestConnectorListIncludesEvidenceSources(t *testing.T) {
 	}
 }
 
+func TestMCPCommandServesInitializeRequest(t *testing.T) {
+	input := strings.NewReader("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\"}}\n")
+	var stdout, stderr bytes.Buffer
+	if code := runMCP(context.Background(), nil, input, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit code = %d: %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"name":"monicheck-local"`) {
+		t.Fatalf("unexpected MCP response: %s", stdout.String())
+	}
+}
+
 func TestLocalProgressIsStageSpecificAndCredentialSafe(t *testing.T) {
 	var output bytes.Buffer
 	for _, event := range []execution.ProgressEvent{

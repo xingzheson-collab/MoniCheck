@@ -18,6 +18,7 @@ import (
 	"monicheck/internal/execution"
 	"monicheck/internal/localruntime"
 	"monicheck/internal/localui"
+	"monicheck/internal/mcpserver"
 	"monicheck/internal/report"
 )
 
@@ -33,6 +34,8 @@ func main() {
 		os.Exit(runLocal(ctx, os.Args[2:], os.Stdout, os.Stderr))
 	case "connectors":
 		os.Exit(runConnectors(os.Args[2:], os.Stdout, os.Stderr))
+	case "mcp":
+		os.Exit(runMCP(ctx, os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 	case "version":
 		os.Exit(runVersion(os.Args[2:], os.Stdout, os.Stderr))
 	case "help", "-h", "--help":
@@ -42,6 +45,25 @@ func main() {
 		usage(os.Stderr)
 		os.Exit(2)
 	}
+}
+
+func runMCP(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("mcp", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	transport := fs.String("transport", "stdio", "MCP transport (stdio)")
+	if err := fs.Parse(args); err != nil || fs.NArg() != 0 {
+		return 2
+	}
+	if *transport != "stdio" {
+		fmt.Fprintf(stderr, "unsupported MCP transport %q\n", *transport)
+		return 2
+	}
+	server := mcpserver.Server{Input: stdin, Output: stdout, Errors: stderr}
+	if err := server.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+		fmt.Fprintf(stderr, "run MCP server: %v\n", err)
+		return 1
+	}
+	return 0
 }
 
 func runLocal(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -242,5 +264,5 @@ func writePrivate(path, content string) error {
 	return os.WriteFile(path, []byte(content), 0o600)
 }
 func usage(out io.Writer) {
-	fmt.Fprintln(out, "MoniCheck - local observability governance\nUsage: monicheck local [options] | monicheck connectors list|validate | monicheck version")
+	fmt.Fprintln(out, "MoniCheck - agent-native local observability audit\nUsage: monicheck local [options] | monicheck connectors list|validate | monicheck mcp | monicheck version")
 }

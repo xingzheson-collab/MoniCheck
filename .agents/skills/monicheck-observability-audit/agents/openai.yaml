@@ -1,0 +1,7 @@
+interface:
+  display_name: "MoniCheck Observability Audit"
+  short_description: "Evidence-backed monitoring coverage and risk audit"
+  brand_color: "#14B8A6"
+  default_prompt: "Use $monicheck-observability-audit to run a read-only audit of my observability stack and explain the highest-confidence actions."
+policy:
+  allow_implicit_invocation: true

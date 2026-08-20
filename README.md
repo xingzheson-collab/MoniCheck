@@ -1,8 +1,32 @@
 # MoniCheck
 
-MoniCheck is a local-first observability governance scanner for self-hosted and hybrid environments. It connects to Prometheus, Grafana, Alertmanager, and Kubernetes manifests, runs the built-in analyzer catalog, evaluates monitoring coverage and risk, and produces an offline report and Local UI.
+MoniCheck Public is an agent-native, local-first observability audit toolkit for self-hosted and hybrid environments. It gives the AI agent you already use a deterministic Go evidence engine, a portable Agent Skill, and read-only local MCP tools. MoniCheck connects to Prometheus, Grafana, Alertmanager, Kubernetes manifests, and other supported sources, then evaluates monitoring coverage, configuration risk, regressions, and cost signals without asking a language model to invent the facts.
 
-This public repository is intentionally Local-only. It contains no hosted website, cloud account system, tenant control plane, Fleet management, billing, or managed execution code.
+This public repository is intentionally local-only. It contains no hosted website, cloud account system, organization control plane, billing, or managed execution code.
+
+## Use with an AI agent
+
+Build the binary and install the included Agent Skill:
+
+```bash
+go build -o bin/monicheck ./cmd/monicheck
+./scripts/install-agent-skill.sh --codex
+```
+
+For any MCP-compatible agent, configure the absolute binary path with the `mcp` command:
+
+```json
+{
+  "mcpServers": {
+    "monicheck": {
+      "command": "/absolute/path/to/monicheck",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Then ask the agent to run a read-only observability audit. The Agent Skill enforces evidence rules such as `UNKNOWN` not meaning `MISSING`; an unresolved Grafana datasource variable cannot justify a panel or metric deletion recommendation. See [`docs/agent-native-toolkit.md`](docs/agent-native-toolkit.md).
 
 > **Release status:** `v0.6.6` is a Preview shared-Grafana repair. A maintainer
 > scan found that `v0.6.5` ignored `MONICHECK_GRAFANA_API_KEY` and rejected
@@ -118,6 +142,8 @@ To hand privacy-safe evidence to an optional private uploader, write the version
 
 ## Scope
 
+- Portable `monicheck-observability-audit` Agent Skill
+- Read-only local MCP server with bounded, structured results
 - Local connectors and deterministic analyzers
 - Versioned multi-connector configuration and safe multi-instance namespacing
 - Coverage and risk analysis
@@ -126,7 +152,7 @@ To hand privacy-safe evidence to an optional private uploader, write the version
 - Manual privacy-safe `activation-receipt.v1` download and feedback handoff
 - Privacy-safe `evidence-bundle.v1` export boundary for optional external delivery
 
-Managed deployment and commercial services are maintained separately and are not part of this repository.
+Hosted scheduling, organization history, shared workflow, access control, and managed delivery are maintained separately and are not part of this repository.
 
 The default state path follows the operating-system user configuration
 directory: `~/Library/Application Support/monicheck/local-state.json` on
