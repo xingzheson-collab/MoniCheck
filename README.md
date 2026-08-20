@@ -4,17 +4,15 @@ MoniCheck is a local-first observability governance scanner for self-hosted and 
 
 This public repository is intentionally Local-only. It contains no hosted website, cloud account system, tenant control plane, Fleet management, billing, or managed execution code.
 
-> **Release status:** `v0.6.4` is a Preview repair release. Public `v0.6.3`
-> required 2h59m at roughly 3,300 resources and 39,000 relationships, while its
-> receipt incorrectly measured only the analyzer window. This release batches
-> durable writes, measures the complete command-to-report path, emits bounded
-> progress, keeps the observed 9,461-Finding comparison exact, and leads with
-> evidence completeness when source evidence is partial. On 2026-08-20, the
-> GitHub-downloaded binary completed a fresh scan of the same real source in
-> 16.17 seconds headlessly and produced the Local UI's first durable report in
-> 12.16 seconds. This is maintainer validation, not external customer evidence,
-> so the release remains Preview while real installs and material-report proof
-> are collected.
+> **Release status:** `v0.6.5` is a Preview correctness release. It retains the
+> `v0.6.4` real-scale persistence and timing repair, which completed a maintainer
+> same-source scan in 16.17 seconds headlessly and produced the Local UI's first
+> durable report in 12.16 seconds. It additionally prevents shared Grafana
+> internal URLs from silently splitting dashboard metrics from their configured
+> Prometheus source: bind with `--prometheus-datasource-uid`, or rely on exact
+> normalized URL matching. Empty references use Grafana's declared default
+> datasource, and unmatched identity is reported as WARNING. This remains
+> maintainer validation, not external customer evidence.
 
 ## Download
 
@@ -29,7 +27,7 @@ Prebuilt releases cover both common CPU families. In Go release names,
 | macOS | `arm64` (Apple silicon) | `darwin_arm64.tar.gz` |
 
 Download the matching archive and `SHA256SUMS` from the
-[v0.6.4 Preview Release](https://github.com/xingzheson-collab/MoniCheck/releases/tag/v0.6.4).
+[v0.6.5 Preview Release](https://github.com/xingzheson-collab/MoniCheck/releases/tag/v0.6.5).
 Verify the checksum before running the binary.
 
 ## Quick start
