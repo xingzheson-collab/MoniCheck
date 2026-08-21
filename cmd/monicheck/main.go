@@ -32,6 +32,8 @@ func main() {
 	switch os.Args[1] {
 	case "local":
 		os.Exit(runLocal(ctx, os.Args[2:], os.Stdout, os.Stderr))
+	case "ui":
+		os.Exit(runUI(ctx, os.Args[2:], os.Stdout, os.Stderr))
 	case "connectors":
 		os.Exit(runConnectors(os.Args[2:], os.Stdout, os.Stderr))
 	case "mcp":
@@ -45,6 +47,32 @@ func main() {
 		usage(os.Stderr)
 		os.Exit(2)
 	}
+}
+
+func runUI(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("ui", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	listen := fs.String("listen", "127.0.0.1:8080", "loopback address for the Local UI")
+	storagePath := fs.String("storage-path", defaultStoragePath(), "completed Local or Agent audit state file")
+	if err := fs.Parse(args); err != nil || fs.NArg() != 0 {
+		return 2
+	}
+	if err := localruntime.ValidateViewOptions(*listen, *storagePath); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	runtime, err := localruntime.OpenExisting(ctx, *storagePath)
+	if err != nil {
+		fmt.Fprintf(stderr, "open audit state: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "MoniCheck Agent audit UI: http://%s/ui/static/?view=agent\nState: %s\n", *listen, *storagePath)
+	server := localui.New(*listen, runtime)
+	if err := server.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+		fmt.Fprintf(stderr, "serve audit UI: %v\n", err)
+		return 1
+	}
+	return 0
 }
 
 func runMCP(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -264,5 +292,5 @@ func writePrivate(path, content string) error {
 	return os.WriteFile(path, []byte(content), 0o600)
 }
 func usage(out io.Writer) {
-	fmt.Fprintln(out, "MoniCheck - agent-native local observability audit\nUsage: monicheck local [options] | monicheck connectors list|validate | monicheck mcp | monicheck version")
+	fmt.Fprintln(out, "MoniCheck - agent-native local observability audit\nUsage: monicheck local [options] | monicheck ui [options] | monicheck connectors list|validate | monicheck mcp | monicheck version")
 }

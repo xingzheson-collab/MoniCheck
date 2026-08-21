@@ -28,7 +28,9 @@ For any MCP-compatible agent, configure the absolute binary path with the `mcp` 
 
 Then ask the agent to run a read-only observability audit. The Agent Skill enforces evidence rules such as `UNKNOWN` not meaning `MISSING`; an unresolved Grafana datasource variable cannot justify a panel or metric deletion recommendation. See [`docs/agent-native-toolkit.md`](docs/agent-native-toolkit.md).
 
-> **Release status:** `v0.7.0` is the first Agent-native Preview. It adds the
+The `v0.7.1` release adds four bounded need-to-know tools after the aggregate audit: `monicheck.findings.query`, `monicheck.coverage.by_service`, `monicheck.entity.get`, and `monicheck.baseline.diff`. They let an Agent answer a named question such as "Is Redis monitoring healthy?" without dumping the estate. Identifiers appear only inside the user's active scope, every result is capped and reports truncation, and every disclosure is recorded in an owner-only local audit file. Provider credentials, endpoints, labels, raw queries, and raw evidence remain excluded. It also adds explicit inventory visibility, a persisted Agent-audit UI entry, YAML datasource binding, and conservative shared-Grafana dashboard filtering.
+
+> **Release status:** `v0.7.1` is an Agent-native Preview. It includes the
 > portable `monicheck-observability-audit` Skill, a local stdio MCP server, and
 > bounded `agent-audit.v1` output while keeping collection and analysis inside
 > the deterministic Local engine. It also retains the `v0.6.6` shared-Grafana
@@ -48,7 +50,7 @@ Prebuilt releases cover both common CPU families. In Go release names,
 | macOS | `arm64` (Apple silicon) | `darwin_arm64.tar.gz` |
 
 Download the matching archive and `SHA256SUMS` from the
-[v0.7.0 Preview Release](https://github.com/xingzheson-collab/MoniCheck/releases/tag/v0.7.0).
+[v0.7.1 Preview Release](https://github.com/xingzheson-collab/MoniCheck/releases/tag/v0.7.1).
 Verify the checksum before running the binary.
 
 ## Quick start
@@ -85,6 +87,18 @@ Panels without an explicit datasource use Grafana's declared default
 datasource. If no explicit binding or exact URL match exists, the Grafana
 connector reports `WARNING` instead of silently treating dashboard metrics as
 an unrelated source.
+
+For a shared Grafana, optionally set `datasource_filter_uid` on its YAML
+connector. MoniCheck excludes only dashboards explicitly tied to another
+datasource; variable, mixed, default, absent, and unresolved references remain
+in scope as `UNKNOWN`.
+
+After an Agent or headless audit has persisted a completed state, review it
+without rerunning providers:
+
+```bash
+./monicheck ui --storage-path ./local-state.json
+```
 
 For monitoring-gap detection, combine telemetry evidence with an independent
 service inventory. A Prometheus-only scan can assess observed metrics, but

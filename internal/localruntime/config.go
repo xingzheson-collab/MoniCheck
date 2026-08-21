@@ -20,29 +20,31 @@ type FileConfig struct {
 }
 
 type ConnectorSpec struct {
-	Type               string   `yaml:"type"`
-	Name               string   `yaml:"name"`
-	URL                string   `yaml:"url"`
-	Path               string   `yaml:"path"`
-	HealthURL          string   `yaml:"health_url"`
-	MetricsURL         string   `yaml:"metrics_url"`
-	RulePath           string   `yaml:"rule_path"`
-	GraphQLPath        string   `yaml:"graphql_path"`
-	Namespace          string   `yaml:"namespace"`
-	TenantID           string   `yaml:"tenant_id"`
-	FeatureGates       string   `yaml:"feature_gates"`
-	Lookback           string   `yaml:"lookback"`
-	DependencyLookback string   `yaml:"dependency_lookback"`
-	OperationLimit     int      `yaml:"operation_limit"`
-	DependencyLimit    int      `yaml:"dependency_limit"`
-	TagValueLimit      int      `yaml:"tag_value_limit"`
-	EndpointLimit      int      `yaml:"endpoint_limit"`
-	AlarmLimit         int      `yaml:"alarm_limit"`
-	AccountID          int      `yaml:"account_id"`
-	HistoryWindowHours int      `yaml:"history_window_hours"`
-	HistoryEventLimit  int      `yaml:"history_event_limit"`
-	Auth               AuthSpec `yaml:"auth"`
-	TLS                TLSSpec  `yaml:"tls"`
+	Type                    string   `yaml:"type"`
+	Name                    string   `yaml:"name"`
+	URL                     string   `yaml:"url"`
+	PrometheusDatasourceUID string   `yaml:"prometheus_datasource_uid"`
+	DatasourceFilterUID     string   `yaml:"datasource_filter_uid"`
+	Path                    string   `yaml:"path"`
+	HealthURL               string   `yaml:"health_url"`
+	MetricsURL              string   `yaml:"metrics_url"`
+	RulePath                string   `yaml:"rule_path"`
+	GraphQLPath             string   `yaml:"graphql_path"`
+	Namespace               string   `yaml:"namespace"`
+	TenantID                string   `yaml:"tenant_id"`
+	FeatureGates            string   `yaml:"feature_gates"`
+	Lookback                string   `yaml:"lookback"`
+	DependencyLookback      string   `yaml:"dependency_lookback"`
+	OperationLimit          int      `yaml:"operation_limit"`
+	DependencyLimit         int      `yaml:"dependency_limit"`
+	TagValueLimit           int      `yaml:"tag_value_limit"`
+	EndpointLimit           int      `yaml:"endpoint_limit"`
+	AlarmLimit              int      `yaml:"alarm_limit"`
+	AccountID               int      `yaml:"account_id"`
+	HistoryWindowHours      int      `yaml:"history_window_hours"`
+	HistoryEventLimit       int      `yaml:"history_event_limit"`
+	Auth                    AuthSpec `yaml:"auth"`
+	TLS                     TLSSpec  `yaml:"tls"`
 }
 
 type AuthSpec struct {
@@ -124,8 +126,14 @@ func LoadFileConfig(path string) (FileConfig, error) {
 }
 
 func buildConfiguredConnectors(cfg FileConfig) ([]connector.Connector, error) {
+	type configuredConnector struct {
+		base     connector.Connector
+		name     string
+		typeName string
+		spec     ConnectorSpec
+	}
 	seenNames := map[string]bool{}
-	result := make([]connector.Connector, 0, len(cfg.Connectors))
+	configured := make([]configuredConnector, 0, len(cfg.Connectors))
 	for index, spec := range cfg.Connectors {
 		typeName := strings.ToLower(strings.TrimSpace(spec.Type))
 		name := strings.TrimSpace(spec.Name)
@@ -141,7 +149,48 @@ func buildConfiguredConnectors(cfg FileConfig) ([]connector.Connector, error) {
 		if err != nil {
 			return nil, fmt.Errorf("connectors[%d] %s: %w", index, name, err)
 		}
-		result = append(result, namespaceConnector(base, name))
+		if strings.TrimSpace(spec.PrometheusDatasourceUID) != "" && typeName != "prometheus" {
+			return nil, fmt.Errorf("connectors[%d] %s: prometheus_datasource_uid is valid only for prometheus", index, name)
+		}
+		if strings.TrimSpace(spec.DatasourceFilterUID) != "" && typeName != "grafana" {
+			return nil, fmt.Errorf("connectors[%d] %s: datasource_filter_uid is valid only for grafana", index, name)
+		}
+		configured = append(configured, configuredConnector{base: base, name: name, typeName: typeName, spec: spec})
+	}
+
+	var binding *configuredConnector
+	grafanaCount := 0
+	var grafana *connector.GrafanaConnector
+	for index := range configured {
+		item := &configured[index]
+		if item.typeName == "grafana" {
+			grafanaCount++
+			grafana, _ = item.base.(*connector.GrafanaConnector)
+			if strings.TrimSpace(item.spec.DatasourceFilterUID) != "" {
+				if err := grafana.ConfigureDashboardDatasourceFilter(item.spec.DatasourceFilterUID); err != nil {
+					return nil, fmt.Errorf("configure Grafana dashboard datasource filter: %w", err)
+				}
+			}
+		}
+		if strings.TrimSpace(item.spec.PrometheusDatasourceUID) != "" {
+			if binding != nil {
+				return nil, fmt.Errorf("only one prometheus_datasource_uid binding is supported per config")
+			}
+			binding = item
+		}
+	}
+	if binding != nil {
+		if grafanaCount != 1 || grafana == nil {
+			return nil, fmt.Errorf("prometheus_datasource_uid requires exactly one grafana connector")
+		}
+		if err := grafana.ConfigurePrometheusDatasource(binding.spec.URL, binding.spec.PrometheusDatasourceUID); err != nil {
+			return nil, fmt.Errorf("configure prometheus datasource binding: %w", err)
+		}
+	}
+
+	result := make([]connector.Connector, 0, len(configured))
+	for _, item := range configured {
+		result = append(result, namespaceConnector(item.base, item.name))
 	}
 	return result, nil
 }

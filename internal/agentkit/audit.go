@@ -41,6 +41,15 @@ type Privacy struct {
 	Excludes       []string `json:"excludes"`
 }
 
+type InventoryVisibility struct {
+	State                     string   `json:"state"`
+	ConnectorCount            int      `json:"connector_count"`
+	ObservedResourceCount     int      `json:"observed_resource_count"`
+	ObservedRelationshipCount int      `json:"observed_relationship_count"`
+	UnverifiedDimensions      []string `json:"unverified_dimensions"`
+	Basis                     string   `json:"basis"`
+}
+
 type Audit struct {
 	ContractVersion      string                       `json:"contract_version"`
 	GeneratedAt          time.Time                    `json:"generated_at"`
@@ -55,6 +64,8 @@ type Audit struct {
 	FindingGroups        []FindingGroup               `json:"finding_groups"`
 	FindingGroupCount    int                          `json:"finding_group_count"`
 	OmittedFindingGroups int                          `json:"omitted_finding_groups"`
+	ActionGroups         []ActionGroup                `json:"action_groups"`
+	InventoryVisibility  InventoryVisibility          `json:"inventory_visibility"`
 	Privacy              Privacy                      `json:"privacy"`
 }
 
@@ -80,6 +91,7 @@ func Run(ctx context.Context, options localruntime.Options) (Audit, error) {
 
 func Build(bundle evidence.Bundle, regression report.LocalRegressionReport, elapsed time.Duration) Audit {
 	groups := groupFindings(bundle.Findings)
+	actionGroups := actionGroupsFromFindingGroups(groups)
 	groupCount := len(groups)
 	if len(groups) > maxFindingGroupCount {
 		groups = groups[:maxFindingGroupCount]
@@ -105,11 +117,26 @@ func Build(bundle evidence.Bundle, regression report.LocalRegressionReport, elap
 		FindingGroups:        groups,
 		FindingGroupCount:    groupCount,
 		OmittedFindingGroups: groupCount - len(groups),
+		ActionGroups:         actionGroups,
+		InventoryVisibility:  inventoryVisibility(bundle.Connectors, bundle.Summary.ResourceCount),
 		Privacy: Privacy{
 			Classification: "PRIVACY_SAFE_AGENT_SUMMARY",
-			Includes:       []string{"aggregate counts", "connector health", "coverage trust", "cost estimates", "finding classifications", "regression movement"},
+			Includes:       []string{"aggregate counts", "connector health", "coverage trust", "cost estimates", "finding classifications", "deterministic action templates", "regression movement"},
 			Excludes:       []string{"credentials", "endpoint URLs", "resource names", "labels", "queries", "raw evidence", "dashboard JSON", "source configuration", "user identity"},
 		},
+	}
+}
+
+func inventoryVisibility(connectors []evidence.ConnectorEvidence, observedResources int) InventoryVisibility {
+	relationships := 0
+	for _, connector := range connectors {
+		relationships += connector.RelationshipCount
+	}
+	return InventoryVisibility{
+		State: "NOT_PROVEN_COMPLETE", ConnectorCount: len(connectors),
+		ObservedResourceCount: observedResources, ObservedRelationshipCount: relationships,
+		UnverifiedDimensions: []string{"provider permission role", "Grafana folder reachability", "API pagination beyond observed responses", "tenant and organization scope"},
+		Basis:                "MoniCheck can report the inventory it observed, but the current evidence does not independently prove that provider credentials can see the complete estate.",
 	}
 }
 

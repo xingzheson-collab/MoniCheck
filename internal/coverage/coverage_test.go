@@ -189,3 +189,37 @@ func TestRelatedServiceIDsScopesAResourceToItsCoverageGraph(t *testing.T) {
 		t.Fatalf("expected no service scope for missing resource, got %#v", got)
 	}
 }
+
+func TestRelatedResourcesForServiceStopsAtSharedConsumer(t *testing.T) {
+	resources := []model.Resource{
+		{ID: "service-api", Type: model.ResourceTypeService, Status: model.ResourceStatusActive},
+		{ID: "service-worker", Type: model.ResourceTypeService, Status: model.ResourceStatusActive},
+		{ID: "job-api", Type: model.ResourceTypeJob, Status: model.ResourceStatusActive},
+		{ID: "target-api", Type: model.ResourceTypeTarget, Status: model.ResourceStatusActive},
+		{ID: "metric-api", Type: model.ResourceTypeMetric, Status: model.ResourceStatusActive},
+		{ID: "metric-worker", Type: model.ResourceTypeMetric, Status: model.ResourceStatusActive},
+		{ID: "dashboard-shared", Type: model.ResourceTypeDashboard, Status: model.ResourceStatusActive},
+	}
+	relationships := []model.Relationship{
+		{ID: "job-api-service", FromID: "job-api", ToID: "service-api", Type: model.RelationshipBelongsTo},
+		{ID: "target-api-job", FromID: "target-api", ToID: "job-api", Type: model.RelationshipBelongsTo},
+		{ID: "target-api-metric", FromID: "target-api", ToID: "metric-api", Type: model.RelationshipProduces},
+		{ID: "metric-worker-service", FromID: "metric-worker", ToID: "service-worker", Type: model.RelationshipBelongsTo},
+		{ID: "dashboard-api", FromID: "dashboard-shared", ToID: "metric-api", Type: model.RelationshipUses},
+		{ID: "dashboard-worker", FromID: "dashboard-shared", ToID: "metric-worker", Type: model.RelationshipUses},
+	}
+
+	related := RelatedResourcesForService("service-api", graph.NewBounded(resources, relationships))
+	ids := map[string]bool{}
+	for _, resource := range related {
+		ids[resource.ID] = true
+	}
+	for _, required := range []string{"job-api", "target-api", "metric-api", "dashboard-shared"} {
+		if !ids[required] {
+			t.Fatalf("service scope missing %s: %#v", required, ids)
+		}
+	}
+	if ids["metric-worker"] || ids["service-worker"] {
+		t.Fatalf("shared dashboard fanned into another service: %#v", ids)
+	}
+}

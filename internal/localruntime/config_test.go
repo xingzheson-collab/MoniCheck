@@ -44,6 +44,69 @@ connectors:
 	}
 }
 
+func TestYAMLPrometheusDatasourceBindingIsExplicitAndFailClosed(t *testing.T) {
+	path := writeConfig(t, `version: 1
+connectors:
+  - type: prometheus
+    name: production
+    url: https://prometheus.example
+    prometheus_datasource_uid: prom-main
+  - type: grafana
+    name: shared
+    url: https://grafana.example
+`)
+	cfg, err := ValidateFileConfig(path)
+	if err != nil {
+		t.Fatalf("valid datasource binding rejected: %v", err)
+	}
+	if cfg.Connectors[0].PrometheusDatasourceUID != "prom-main" {
+		t.Fatalf("datasource UID was not retained: %#v", cfg.Connectors[0])
+	}
+
+	ambiguous := writeConfig(t, `version: 1
+connectors:
+  - type: prometheus
+    url: https://prometheus.example
+    prometheus_datasource_uid: prom-main
+  - type: grafana
+    name: first
+    url: https://grafana-one.example
+  - type: grafana
+    name: second
+    url: https://grafana-two.example
+`)
+	if _, err := ValidateFileConfig(ambiguous); err == nil || !strings.Contains(err.Error(), "exactly one grafana") {
+		t.Fatalf("ambiguous Grafana binding did not fail closed: %v", err)
+	}
+}
+
+func TestYAMLGrafanaDatasourceFilterIsOptionalAndScoped(t *testing.T) {
+	path := writeConfig(t, `version: 1
+connectors:
+  - type: grafana
+    name: shared
+    url: https://grafana.example
+    datasource_filter_uid: prom-main
+`)
+	cfg, err := ValidateFileConfig(path)
+	if err != nil {
+		t.Fatalf("valid datasource filter rejected: %v", err)
+	}
+	if cfg.Connectors[0].DatasourceFilterUID != "prom-main" {
+		t.Fatalf("datasource filter UID was not retained: %#v", cfg.Connectors[0])
+	}
+
+	invalid := writeConfig(t, `version: 1
+connectors:
+  - type: prometheus
+    url: https://prometheus.example
+    datasource_filter_uid: prom-main
+`)
+	if _, err := ValidateFileConfig(invalid); err == nil || !strings.Contains(err.Error(), "valid only for grafana") {
+		t.Fatalf("non-Grafana datasource filter did not fail closed: %v", err)
+	}
+}
+
 type staticConnector struct {
 	id       string
 	snapshot connector.Snapshot

@@ -79,6 +79,35 @@ type scanInput struct {
 	StoragePath string `json:"storage_path"`
 }
 
+type findingsQueryToolInput struct {
+	StoragePath string `json:"storage_path"`
+	Service     string `json:"service"`
+	Entity      string `json:"entity"`
+	Type        string `json:"type"`
+	Severity    string `json:"severity"`
+	Limit       int    `json:"limit"`
+	Purpose     string `json:"purpose"`
+}
+
+type coverageByServiceToolInput struct {
+	StoragePath string `json:"storage_path"`
+	Service     string `json:"service"`
+	Purpose     string `json:"purpose"`
+}
+
+type entityGetToolInput struct {
+	StoragePath string `json:"storage_path"`
+	ID          string `json:"id"`
+	Limit       int    `json:"limit"`
+	Purpose     string `json:"purpose"`
+}
+
+type baselineDiffToolInput struct {
+	StoragePath string `json:"storage_path"`
+	Limit       int    `json:"limit"`
+	Purpose     string `json:"purpose"`
+}
+
 func (s Server) Run(ctx context.Context) error {
 	if s.Input == nil || s.Output == nil {
 		return errors.New("MCP stdio input and output are required")
@@ -144,7 +173,7 @@ func (s Server) handle(ctx context.Context, message request) (any, *protocolErro
 				"name": "monicheck-local", "title": "MoniCheck Local", "version": info.Version,
 				"description": "Read-only local observability audit tools backed by deterministic MoniCheck analyzers.",
 			},
-			"instructions": "Tools return privacy-safe aggregate evidence. Credentials are read only from the MoniCheck process environment and must never be passed as tool arguments.",
+			"instructions": "Audit tools return privacy-safe aggregate evidence by default. Entity identifiers are available only through bounded need-to-know query tools with an explicit user purpose and a local audit record. Credentials are read only from the MoniCheck process environment and must never be passed as tool arguments.",
 		}, nil
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
@@ -166,6 +195,7 @@ func (s Server) handle(ctx context.Context, message request) (any, *protocolErro
 func tools() []toolDefinition {
 	localReadOnly := map[string]any{"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false}
 	auditReadOnly := map[string]any{"readOnlyHint": true, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true}
+	queryReadOnly := map[string]any{"readOnlyHint": true, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false}
 	return []toolDefinition{
 		{
 			Name: "monicheck.connectors.list", Title: "List MoniCheck connectors",
@@ -191,6 +221,63 @@ func tools() []toolDefinition {
 					"storage_path": map[string]any{"type": "string", "description": "Optional durable local state path used for baseline comparison."},
 				},
 			}, Annotations: auditReadOnly,
+		},
+		{
+			Name: "monicheck.findings.query", Title: "Query scoped MoniCheck findings",
+			Description: "Return bounded current findings for a user-requested service, entity, finding type, or severity. Resource identifiers are disclosed only within this purpose-bound scope and the disclosure is recorded locally.",
+			InputSchema: map[string]any{
+				"type": "object", "additionalProperties": false,
+				"properties": map[string]any{
+					"storage_path": map[string]any{"type": "string", "description": "Optional durable Local state path produced by monicheck.audit.run."},
+					"service":      map[string]any{"type": "string", "description": "Optional exact or uniquely matching Service name, UID, or ID from the user's question."},
+					"entity":       map[string]any{"type": "string", "description": "Optional exact or uniquely matching entity name, UID, or ID from the user's question."},
+					"type":         map[string]any{"type": "string", "description": "Optional exact finding type."},
+					"severity":     map[string]any{"type": "string", "enum": []string{"CRITICAL", "WARNING", "INFO"}},
+					"limit":        map[string]any{"type": "integer", "minimum": 1, "maximum": 50, "default": 20},
+					"purpose":      map[string]any{"type": "string", "maxLength": 240, "description": "Required concise statement of the user's active investigation purpose."},
+				},
+				"required": []string{"purpose"},
+			}, Annotations: queryReadOnly,
+		},
+		{
+			Name: "monicheck.coverage.by_service", Title: "Inspect monitoring coverage for one Service",
+			Description: "Return the deterministic metric, dashboard, and alert coverage matrix for one user-requested Service, preserving MISSING and UNKNOWN semantics.",
+			InputSchema: map[string]any{
+				"type": "object", "additionalProperties": false,
+				"properties": map[string]any{
+					"storage_path": map[string]any{"type": "string"},
+					"service":      map[string]any{"type": "string", "description": "Exact or uniquely matching Service name, UID, or ID."},
+					"purpose":      map[string]any{"type": "string", "maxLength": 240, "description": "Required concise statement of the user's active investigation purpose."},
+				},
+				"required": []string{"service", "purpose"},
+			}, Annotations: queryReadOnly,
+		},
+		{
+			Name: "monicheck.entity.get", Title: "Inspect one MoniCheck entity",
+			Description: "Return one exact entity, bounded graph relationships, and current findings. Labels, raw queries, raw evidence, endpoints, and credentials remain excluded.",
+			InputSchema: map[string]any{
+				"type": "object", "additionalProperties": false,
+				"properties": map[string]any{
+					"storage_path": map[string]any{"type": "string"},
+					"id":           map[string]any{"type": "string", "description": "Exact entity ID returned by another MoniCheck query."},
+					"limit":        map[string]any{"type": "integer", "minimum": 1, "maximum": 50, "default": 20},
+					"purpose":      map[string]any{"type": "string", "maxLength": 240, "description": "Required concise statement of the user's active investigation purpose."},
+				},
+				"required": []string{"id", "purpose"},
+			}, Annotations: queryReadOnly,
+		},
+		{
+			Name: "monicheck.baseline.diff", Title: "Inspect the latest Local baseline change",
+			Description: "Return bounded deterministic changes between the latest two Local snapshots, with identifiers only where current evidence can resolve them.",
+			InputSchema: map[string]any{
+				"type": "object", "additionalProperties": false,
+				"properties": map[string]any{
+					"storage_path": map[string]any{"type": "string"},
+					"limit":        map[string]any{"type": "integer", "minimum": 1, "maximum": 50, "default": 20},
+					"purpose":      map[string]any{"type": "string", "maxLength": 240, "description": "Required concise statement of the user's active comparison purpose."},
+				},
+				"required": []string{"purpose"},
+			}, Annotations: queryReadOnly,
 		},
 	}
 }
@@ -240,6 +327,36 @@ func (s Server) callTool(ctx context.Context, params callToolParams) toolResult 
 			AlertmanagerURL:         os.Getenv("MONICHECK_ALERTMANAGER_URL"),
 			KubernetesManifest:      os.Getenv("MONICHECK_KUBERNETES_MANIFEST_PATH"),
 		})
+	case "monicheck.findings.query":
+		var input findingsQueryToolInput
+		if decodeErr := decodeArguments(params.Arguments, &input); decodeErr != nil {
+			err = decodeErr
+			break
+		}
+		value, err = agentkit.QueryFindings(ctx, queryStoragePath(input.StoragePath), agentkit.FindingQueryInput{
+			Service: input.Service, Entity: input.Entity, Type: input.Type, Severity: input.Severity, Limit: input.Limit, Purpose: input.Purpose,
+		})
+	case "monicheck.coverage.by_service":
+		var input coverageByServiceToolInput
+		if decodeErr := decodeArguments(params.Arguments, &input); decodeErr != nil {
+			err = decodeErr
+			break
+		}
+		value, err = agentkit.CoverageByService(ctx, queryStoragePath(input.StoragePath), agentkit.CoverageByServiceInput{Service: input.Service, Purpose: input.Purpose})
+	case "monicheck.entity.get":
+		var input entityGetToolInput
+		if decodeErr := decodeArguments(params.Arguments, &input); decodeErr != nil {
+			err = decodeErr
+			break
+		}
+		value, err = agentkit.GetEntity(ctx, queryStoragePath(input.StoragePath), agentkit.EntityGetInput{ID: input.ID, Limit: input.Limit, Purpose: input.Purpose})
+	case "monicheck.baseline.diff":
+		var input baselineDiffToolInput
+		if decodeErr := decodeArguments(params.Arguments, &input); decodeErr != nil {
+			err = decodeErr
+			break
+		}
+		value, err = agentkit.BaselineDiff(ctx, queryStoragePath(input.StoragePath), agentkit.BaselineDiffInput{Limit: input.Limit, Purpose: input.Purpose})
 	default:
 		err = fmt.Errorf("unknown tool %q", params.Name)
 	}
@@ -271,4 +388,11 @@ func defaultStoragePath() string {
 		return ".monicheck-state.json"
 	}
 	return filepath.Join(directory, "monicheck", "local-state.json")
+}
+
+func queryStoragePath(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return defaultStoragePath()
+	}
+	return strings.TrimSpace(value)
 }

@@ -15,7 +15,9 @@ Write for an SRE who needs to decide what to inspect next, not for an analyzer a
 ## Writing Rules
 
 - Prefer grouped findings over listing hundreds of repeated instances.
+- Prefer deterministic `action_groups` over inventing a new grouping. Carry forward each group's consequence, first step, and verification condition.
 - Distinguish an analyzer result from the agent's interpretation.
 - Explain why an action is safe enough to consider.
 - State the missing evidence that prevents a stronger conclusion.
-- Never reproduce credentials, endpoint URLs, resource names, labels, raw queries, or dashboard JSON from private artifacts unless the user explicitly asks to inspect a local owner-only report.
+- Never reproduce credentials, endpoint URLs, labels, raw queries, raw evidence, or dashboard JSON from private artifacts.
+- Resource identifiers may be used only when a purpose-bound MoniCheck query returned them for the user's active question. Keep them inside that answer and preserve the query's truncation statement.

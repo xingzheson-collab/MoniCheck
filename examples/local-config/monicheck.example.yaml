@@ -4,6 +4,9 @@ connectors:
   - type: prometheus
     name: production-metrics
     url: https://prometheus.example.com
+    # Optional when Grafana stores a different internal URL for this source.
+    # The config must contain exactly one Grafana connector when this is set.
+    prometheus_datasource_uid: prom-main
     auth:
       bearer_token_env: PROMETHEUS_TOKEN
     tls:
@@ -14,6 +17,9 @@ connectors:
     name: shared-grafana
     url: https://grafana.example.com
     namespace: production
+    # Optional: exclude only dashboards explicitly tied to another datasource.
+    # Variable and unresolved datasource dashboards remain in scope as UNKNOWN.
+    datasource_filter_uid: prom-main
     auth:
       api_key_env: GRAFANA_API_KEY
 

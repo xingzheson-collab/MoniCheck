@@ -25,9 +25,10 @@ type Options struct {
 }
 
 type Runtime struct {
-	Store     *storage.Store
-	Engine    *execution.Engine
-	Execution model.ExecutionResult
+	Store       *storage.Store
+	Engine      *execution.Engine
+	Execution   model.ExecutionResult
+	StateSource string
 }
 
 func ValidateOptions(o Options) error {
@@ -43,6 +44,17 @@ func ValidateOptions(o Options) error {
 	}
 	if strings.TrimSpace(o.PrometheusDatasourceUID) != "" && (strings.TrimSpace(o.PrometheusURL) == "" || strings.TrimSpace(o.GrafanaURL) == "") {
 		return errors.New("--prometheus-datasource-uid requires both --prometheus-url and --grafana-url")
+	}
+	return nil
+}
+
+func ValidateViewOptions(listen, storagePath string) error {
+	host, _, err := net.SplitHostPort(strings.TrimSpace(listen))
+	if err != nil || (host != "127.0.0.1" && host != "localhost" && host != "::1") {
+		return errors.New("--listen must be a loopback host and port")
+	}
+	if strings.TrimSpace(storagePath) == "" {
+		return errors.New("--storage-path is required")
 	}
 	return nil
 }
@@ -71,7 +83,42 @@ func New(ctx context.Context, o Options) (*Runtime, error) {
 	if _, err := report.SaveLocalActivationTiming(ctx, store, started, time.Now().UTC(), 15*time.Minute); err != nil {
 		return nil, err
 	}
-	return &Runtime{Store: store, Engine: engine, Execution: executionResult}, nil
+	return &Runtime{Store: store, Engine: engine, Execution: executionResult, StateSource: "LIVE_LOCAL_RUNTIME"}, nil
+}
+
+// OpenExisting opens completed Local or Agent audit state without contacting
+// providers or running analyzers again.
+func OpenExisting(ctx context.Context, storagePath string) (*Runtime, error) {
+	store, err := storage.NewFileStore(strings.TrimSpace(storagePath))
+	if err != nil {
+		return nil, fmt.Errorf("open existing local state: %w", err)
+	}
+	exports, err := store.ReportExports.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	hasReport := false
+	for _, item := range exports {
+		if item.Origin == report.LocalPostureSnapshotOrigin {
+			hasReport = true
+			break
+		}
+	}
+	if !hasReport {
+		return nil, errors.New("existing state has no completed Local report")
+	}
+	executions, err := store.Executions.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var latest model.ExecutionResult
+	for _, item := range executions {
+		if latest.FinishedAt.IsZero() || item.FinishedAt.After(latest.FinishedAt) {
+			latest = item
+		}
+	}
+	engine := execution.NewEngine(store, nil, newRegistry(), logger.New(os.Stderr, "quiet"))
+	return &Runtime{Store: store, Engine: engine, Execution: latest, StateSource: "PERSISTED_AGENT_AUDIT"}, nil
 }
 
 func (r *Runtime) LatestReport(ctx context.Context) (model.ReportExport, error) {

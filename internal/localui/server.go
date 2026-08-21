@@ -68,7 +68,11 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	for _, status := range statuses {
 		views = append(views, connectorStatusView{ConnectorStatus: status, Group: localruntime.ConnectorGroup(status.ID)})
 	}
-	_ = json.NewEncoder(w).Encode(map[string]any{"connectors": views})
+	source := s.runtime.StateSource
+	if source == "" {
+		source = "LIVE_LOCAL_RUNTIME"
+	}
+	_ = json.NewEncoder(w).Encode(map[string]any{"connectors": views, "state_source": source})
 }
 
 func (s *Server) activationReceipt(w http.ResponseWriter, r *http.Request) {

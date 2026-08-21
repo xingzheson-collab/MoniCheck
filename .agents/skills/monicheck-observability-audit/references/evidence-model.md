@@ -44,3 +44,9 @@ A deletion recommendation needs all of the following:
 4. no contradictory dashboard, alert, recording-rule, or ownership evidence.
 
 Without those conditions, recommend investigation or evidence collection, not deletion.
+
+## Need-To-Know Identifiers
+
+`agent-audit.v1` remains aggregate and excludes resource names. A user can still ask about their own named Service or entity. In that case, use a bounded query tool with an explicit purpose copied from the active investigation.
+
+The query may return entity IDs and names only inside that scope. It does not return labels, raw queries, raw evidence, endpoints, credentials, dashboard JSON, source configuration, or user identity. Treat `truncated=true` as incomplete evidence and do not imply that the returned page is exhaustive. The local `agent-query-audit.v1` record is the disclosure receipt.

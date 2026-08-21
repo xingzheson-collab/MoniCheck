@@ -82,3 +82,24 @@ func TestLocalUILeadsWithEvidenceCompletenessWhenCoverageIsPartial(t *testing.T)
 		}
 	}
 }
+
+func TestLocalUIExposesPersistedAgentAuditEntry(t *testing.T) {
+	body, err := fs.ReadFile(staticFiles, "static/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script, err := fs.ReadFile(staticFiles, "static/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{"data-view=\"agent\"", "Agent audit"} {
+		if !strings.Contains(string(body), required) {
+			t.Fatalf("Local UI is missing Agent audit navigation %q", required)
+		}
+	}
+	for _, required := range []string{"PERSISTED_AGENT_AUDIT", "does not contact providers or rerun analyzers", "searchParams.set('view'"} {
+		if !strings.Contains(string(script), required) {
+			t.Fatalf("Local UI is missing persisted Agent behavior %q", required)
+		}
+	}
+}

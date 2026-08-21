@@ -335,41 +335,72 @@ func serviceRelatedResources(serviceID string, resourceGraph *graph.Graph) []mod
 		return nil
 	}
 	seen := map[string]bool{}
-	queue := []string{}
 	result := []model.Resource{}
-	for _, relationship := range resourceGraph.Incoming(serviceID) {
-		if relationship.Type != model.RelationshipBelongsTo || seen[relationship.FromID] {
-			continue
+	add := func(id string) bool {
+		if id == serviceID || seen[id] {
+			return false
 		}
-		if resource, ok := resourceGraph.Resource(relationship.FromID); ok && resource.Status == model.ResourceStatusActive {
-			seen[resource.ID] = true
-			result = append(result, resource)
-			queue = append(queue, resource.ID)
+		resource, ok := resourceGraph.Resource(id)
+		if !ok || resource.Status != model.ResourceStatusActive {
+			return false
 		}
+		seen[id] = true
+		result = append(result, resource)
+		return true
 	}
-	for len(queue) > 0 {
-		id := queue[0]
-		queue = queue[1:]
-		relationships := append(resourceGraph.Outgoing(id), resourceGraph.Incoming(id)...)
-		for _, relationship := range relationships {
-			next := ""
-			switch {
-			case relationship.FromID == id && relationship.Type == model.RelationshipProduces:
-				next = relationship.ToID
-			case relationship.ToID == id && (relationship.Type == model.RelationshipUses || relationship.Type == model.RelationshipProduces):
-				next = relationship.FromID
-			}
-			if next == "" || seen[next] {
-				continue
-			}
-			if resource, ok := resourceGraph.Resource(next); ok && resource.Status == model.ResourceStatusActive {
-				seen[next] = true
-				result = append(result, resource)
-				queue = append(queue, next)
+
+	// Ownership may be nested, for example Target -> Job -> Service.
+	ownershipQueue := []string{serviceID}
+	for len(ownershipQueue) > 0 {
+		id := ownershipQueue[0]
+		ownershipQueue = ownershipQueue[1:]
+		for _, relationship := range resourceGraph.Incoming(id) {
+			if relationship.Type == model.RelationshipBelongsTo && add(relationship.FromID) {
+				ownershipQueue = append(ownershipQueue, relationship.FromID)
 			}
 		}
 	}
+
+	// Follow production only in its declared direction. This includes metrics
+	// emitted by an owned Target or recording rule without traversing through a
+	// shared dashboard into every other metric that dashboard happens to use.
+	productionQueue := make([]string, 0, len(result))
+	for _, resource := range result {
+		productionQueue = append(productionQueue, resource.ID)
+	}
+	for len(productionQueue) > 0 {
+		id := productionQueue[0]
+		productionQueue = productionQueue[1:]
+		for _, relationship := range resourceGraph.Outgoing(id) {
+			if relationship.Type == model.RelationshipProduces && add(relationship.ToID) {
+				productionQueue = append(productionQueue, relationship.ToID)
+			}
+		}
+	}
+
+	// A dashboard, panel, or alert that consumes scoped evidence is relevant,
+	// but it is a terminal consumer. Do not enqueue it and fan back out through
+	// its other USES edges.
+	evidenceIDs := make([]string, 0, len(result))
+	for _, resource := range result {
+		evidenceIDs = append(evidenceIDs, resource.ID)
+	}
+	for _, id := range evidenceIDs {
+		for _, relationship := range resourceGraph.Incoming(id) {
+			switch relationship.Type {
+			case model.RelationshipUses, model.RelationshipReferences, model.RelationshipProduces:
+				add(relationship.FromID)
+			}
+		}
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].ID < result[j].ID })
 	return result
+}
+
+// RelatedResourcesForService returns the active evidence resources used to
+// assess one Service. Callers must still bound any identifiers they disclose.
+func RelatedResourcesForService(serviceID string, resourceGraph *graph.Graph) []model.Resource {
+	return serviceRelatedResources(strings.TrimSpace(serviceID), resourceGraph)
 }
 
 // RelatedServiceIDs returns active Services whose coverage evidence graph

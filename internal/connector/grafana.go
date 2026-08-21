@@ -41,6 +41,7 @@ type GrafanaConnector struct {
 	datasourceHealthWorkers  int
 	prometheusMetricInstance string
 	prometheusDatasourceUID  string
+	dashboardDatasourceUID   string
 }
 
 // ConfigurePrometheusDatasource binds Grafana query evidence to the canonical
@@ -52,6 +53,18 @@ func (c *GrafanaConnector) ConfigurePrometheusDatasource(metricInstance string, 
 	}
 	c.prometheusMetricInstance = metricInstance
 	c.prometheusDatasourceUID = strings.TrimSpace(datasourceUID)
+	return nil
+}
+
+// ConfigureDashboardDatasourceFilter limits dashboard ingestion to dashboards
+// that are explicitly attributable to the selected datasource. Dashboards with
+// dynamic or otherwise unresolved datasource references remain in scope.
+func (c *GrafanaConnector) ConfigureDashboardDatasourceFilter(datasourceUID string) error {
+	datasourceUID = strings.TrimSpace(datasourceUID)
+	if datasourceUID == "" {
+		return fmt.Errorf("dashboard datasource filter UID is empty")
+	}
+	c.dashboardDatasourceUID = datasourceUID
 	return nil
 }
 
@@ -210,6 +223,9 @@ func (c *GrafanaConnector) Sync(ctx context.Context) (Snapshot, error) {
 
 	dashboardDetails := c.dashboardDetails(ctx, dashboards, dashboardSearch.Details)
 	dashboardDetailFailureCount := 0
+	dashboardFilterIncluded := 0
+	dashboardFilterExcluded := 0
+	dashboardFilterUnknown := 0
 	for index, item := range dashboards {
 		detail := dashboardDetails[index].Detail
 		err := dashboardDetails[index].Err
@@ -226,6 +242,18 @@ func (c *GrafanaConnector) Sync(ctx context.Context) (Snapshot, error) {
 				appendGrafanaRelationship(&relationships, dashboardResource.ID, folderResource.ID, model.RelationshipBelongsTo, now)
 			}
 			continue
+		}
+		if c.dashboardDatasourceUID != "" {
+			decision := grafanaDashboardDatasourceFilterDecision(detail.Dashboard, c.dashboardDatasourceUID)
+			switch decision {
+			case grafanaDatasourceFilterExcluded:
+				dashboardFilterExcluded++
+				continue
+			case grafanaDatasourceFilterIncluded:
+				dashboardFilterIncluded++
+			default:
+				dashboardFilterUnknown++
+			}
 		}
 		dashboardResource := grafanaResource(model.ResourceTypeDashboard, detail.Dashboard.Title, c.baseURL, "dashboard:"+item.UID, now)
 		dashboardResource.Metadata = grafanaDashboardMetadata(item, detail)
@@ -350,6 +378,14 @@ func (c *GrafanaConnector) Sync(ctx context.Context) (Snapshot, error) {
 		len(dashboards),
 		dashboardDetailFailureCount,
 	))
+	if c.dashboardDatasourceUID != "" {
+		diagnostics = append(diagnostics, grafanaDashboardDatasourceFilterDiagnostic(
+			c.dashboardDatasourceUID,
+			dashboardFilterIncluded,
+			dashboardFilterExcluded,
+			dashboardFilterUnknown,
+		))
+	}
 	addGrafanaAlertRules(resourceByID, &relationships, alertRules, datasourceByUID, c.baseURL, now)
 	addGrafanaReceivers(resourceByID, &relationships, contactPoints, notificationPolicy, alertRules, c.baseURL, now)
 	addGrafanaInhibitionRules(resourceByID, inhibitionRules, c.baseURL, now)

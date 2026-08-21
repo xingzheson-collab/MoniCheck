@@ -33,7 +33,7 @@ type localFindingIndex struct {
 }
 
 type LocalFindingChange struct {
-	id       string
+	ID       string              `json:"-"`
 	Type     string              `json:"type"`
 	Severity model.Severity      `json:"severity"`
 	From     model.FindingStatus `json:"from,omitempty"`
@@ -249,28 +249,28 @@ func compareLocalFindingIndexes(previous, current *localFindingIndex) *LocalFind
 		switch {
 		case !found && item.Status == model.FindingStatusOpen:
 			result.NewOpen++
-			result.addChange(LocalFindingChange{id: item.ID, Type: item.Type, Severity: item.Severity, To: item.Status, Change: "NEW_OPEN"})
+			result.addChange(LocalFindingChange{ID: item.ID, Type: item.Type, Severity: item.Severity, To: item.Status, Change: "NEW_OPEN"})
 		case found && prior.Status != model.FindingStatusOpen && item.Status == model.FindingStatusOpen:
 			result.Reopened++
-			result.addChange(LocalFindingChange{id: item.ID, Type: item.Type, Severity: item.Severity, From: prior.Status, To: item.Status, Change: "REOPENED"})
+			result.addChange(LocalFindingChange{ID: item.ID, Type: item.Type, Severity: item.Severity, From: prior.Status, To: item.Status, Change: "REOPENED"})
 		case found && prior.Status == model.FindingStatusOpen && item.Status == model.FindingStatusOpen:
 			result.PersistentOpen++
 		case found && prior.Status == model.FindingStatusOpen && item.Status != model.FindingStatusOpen:
 			result.Triaged++
-			result.addChange(LocalFindingChange{id: item.ID, Type: item.Type, Severity: item.Severity, From: prior.Status, To: item.Status, Change: "TRIAGED"})
+			result.addChange(LocalFindingChange{ID: item.ID, Type: item.Type, Severity: item.Severity, From: prior.Status, To: item.Status, Change: "TRIAGED"})
 		}
 	}
 	for _, item := range previous.Items {
 		if _, found := currentByID[item.ID]; !found && item.Status == model.FindingStatusOpen {
 			result.Cleared++
-			result.addChange(LocalFindingChange{id: item.ID, Type: item.Type, Severity: item.Severity, From: item.Status, Change: "CLEARED"})
+			result.addChange(LocalFindingChange{ID: item.ID, Type: item.Type, Severity: item.Severity, From: item.Status, Change: "CLEARED"})
 		}
 	}
 	sort.Slice(result.Changes, func(i, j int) bool {
 		if result.Changes[i].Change != result.Changes[j].Change {
 			return result.Changes[i].Change < result.Changes[j].Change
 		}
-		return result.Changes[i].id < result.Changes[j].id
+		return result.Changes[i].ID < result.Changes[j].ID
 	})
 	return result
 }

@@ -39,4 +39,13 @@ func TestBuildProducesBoundedPrivacySafeAgentSummary(t *testing.T) {
 	if got.Connectors[0].InstanceRef != "connector_anon" || got.Summary.ResourceCount != 42 {
 		t.Fatalf("evidence summary was not preserved: %#v", got)
 	}
+	if len(got.ActionGroups) != 1 || got.ActionGroups[0].Family != "configuration-risk" || got.ActionGroups[0].FindingCount != 30 {
+		t.Fatalf("deterministic action grouping missing: %#v", got.ActionGroups)
+	}
+	if got.ActionGroups[0].Consequence == "" || got.ActionGroups[0].FirstStep == "" || got.ActionGroups[0].Verification == "" {
+		t.Fatalf("action template is incomplete: %#v", got.ActionGroups[0])
+	}
+	if got.InventoryVisibility.State != "NOT_PROVEN_COMPLETE" || len(got.InventoryVisibility.UnverifiedDimensions) == 0 {
+		t.Fatalf("inventory visibility was silently asserted: %#v", got.InventoryVisibility)
+	}
 }
