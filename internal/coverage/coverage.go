@@ -116,11 +116,17 @@ func ValidateExpectation(expectation model.CoverageExpectation) error {
 	if strings.TrimSpace(expectation.ID) == "" || strings.TrimSpace(expectation.Name) == "" {
 		return fmt.Errorf("id and name are required")
 	}
-	if expectation.Scope != model.CoverageScopeAllServices && expectation.Scope != model.CoverageScopeService {
-		return fmt.Errorf("scope must be ALL_SERVICES or SERVICE")
+	if expectation.Scope != model.CoverageScopeAllServices && expectation.Scope != model.CoverageScopeService && expectation.Scope != model.CoverageScopeNamespace && expectation.Scope != model.CoverageScopeLabel {
+		return fmt.Errorf("scope must be ALL_SERVICES, SERVICE, NAMESPACE, or LABEL_SELECTOR")
 	}
-	if expectation.Scope == model.CoverageScopeService && strings.TrimSpace(expectation.ScopeValue) == "" {
-		return fmt.Errorf("scope_value is required for SERVICE scope")
+	if expectation.Scope != model.CoverageScopeAllServices && strings.TrimSpace(expectation.ScopeValue) == "" {
+		return fmt.Errorf("scope_value is required for scoped expectations")
+	}
+	if expectation.Scope == model.CoverageScopeLabel {
+		parts := strings.SplitN(expectation.ScopeValue, "=", 2)
+		if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
+			return fmt.Errorf("LABEL_SELECTOR scope_value must use key=value")
+		}
 	}
 	if strings.TrimSpace(expectation.Owner) == "" || strings.TrimSpace(expectation.Rationale) == "" {
 		return fmt.Errorf("owner and rationale are required")
@@ -184,7 +190,7 @@ func Assess(resources []model.Resource, resourceGraph *graph.Graph, expectations
 			continue
 		}
 		for _, service := range services {
-			if expectation.Scope == model.CoverageScopeService && expectation.ScopeValue != service.ID {
+			if !expectationMatchesService(expectation, service) {
 				continue
 			}
 			serviceSeen[service.ID] = true
@@ -268,6 +274,22 @@ func Assess(resources []model.Resource, resourceGraph *graph.Graph, expectations
 		return left.ExpectationID < right.ExpectationID
 	})
 	return summary
+}
+
+func expectationMatchesService(expectation model.CoverageExpectation, service model.Resource) bool {
+	switch expectation.Scope {
+	case model.CoverageScopeAllServices:
+		return true
+	case model.CoverageScopeService:
+		return expectation.ScopeValue == service.ID || expectation.ScopeValue == service.Name
+	case model.CoverageScopeNamespace:
+		return service.Labels["namespace"] == expectation.ScopeValue
+	case model.CoverageScopeLabel:
+		parts := strings.SplitN(expectation.ScopeValue, "=", 2)
+		return len(parts) == 2 && service.Labels[strings.TrimSpace(parts[0])] == strings.TrimSpace(parts[1])
+	default:
+		return false
+	}
 }
 
 func coverageEvidence(evaluable, unknown int) (EvidenceState, *float64) {

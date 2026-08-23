@@ -75,6 +75,22 @@ var actionTemplates = map[string]actionTemplate{
 	},
 }
 
+func actionTemplateFor(family string) actionTemplate {
+	if template, ok := actionTemplates[family]; ok {
+		return template
+	}
+	if strings.HasPrefix(family, "hygiene-backlog/") {
+		resourceType := strings.TrimPrefix(family, "hygiene-backlog/")
+		return actionTemplate{
+			Title:        "Review " + resourceType + " hygiene backlog",
+			Consequence:  "Accumulated configuration findings can hide higher-value work and make future changes harder to review safely.",
+			FirstStep:    "Assign an owner for this resource family, sample the highest-severity findings, then batch only changes that share the same operational consequence.",
+			Verification: "Repeat the scan and confirm the resource-family backlog falls without new reliability or coverage regressions.",
+		}
+	}
+	return actionTemplates["configuration-risk"]
+}
+
 func actionGroupsFromFindingGroups(findingGroups []FindingGroup) []ActionGroup {
 	type groupState struct {
 		group ActionGroup
@@ -85,7 +101,7 @@ func actionGroupsFromFindingGroups(findingGroups []FindingGroup) []ActionGroup {
 		family := actionFamily(finding.Type, finding.Category, finding.ResourceType)
 		state := states[family]
 		if state == nil {
-			template := actionTemplates[family]
+			template := actionTemplateFor(family)
 			state = &groupState{group: ActionGroup{
 				ID: model.StableID("agent_action", family), Family: family, Title: template.Title,
 				Severity: model.Severity(finding.Severity), Consequence: template.Consequence,
@@ -126,7 +142,7 @@ func actionGroupsFromQuery(items, disclosedItems []FindingQueryItem) []ActionGro
 		family := actionFamily(item.Type, string(item.Category), string(item.Resource.Type))
 		state := states[family]
 		if state == nil {
-			template := actionTemplates[family]
+			template := actionTemplateFor(family)
 			state = &groupState{group: ActionGroup{
 				ID: model.StableID("agent_action", family), Family: family, Title: template.Title,
 				Severity: item.Severity, Consequence: template.Consequence,
@@ -211,6 +227,9 @@ func actionFamily(findingType, category, resourceType string) string {
 	if strings.EqualFold(category, string(model.FindingCategoryCost)) || strings.Contains(strings.ToLower(findingType), "cardinality") || strings.Contains(strings.ToLower(findingType), "unusedmetric") {
 		return "telemetry-cost"
 	}
-	_ = resourceType
-	return "configuration-risk"
+	resourceType = strings.ToLower(strings.TrimSpace(resourceType))
+	if resourceType == "" {
+		resourceType = "unclassified"
+	}
+	return "hygiene-backlog/" + resourceType
 }

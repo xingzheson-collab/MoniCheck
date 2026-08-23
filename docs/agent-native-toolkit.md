@@ -37,6 +37,15 @@ Configure a local MCP client to launch the absolute binary path:
 
 Endpoints and credentials remain in process environment variables or the local YAML configuration. MCP arguments accept only local configuration and state paths, so an agent does not need to receive an internal endpoint or secret value.
 
+For Grafana, use a service-account token with read access to the folders,
+dashboards, datasources, alert rules, and provisioning resources you intend to
+audit. A token scoped to one organization or folder cannot prove estate-wide
+visibility; the audit will keep inventory at `NOT_PROVEN_COMPLETE`. An Admin
+role can improve API reach but does not bypass folder permissions, datasource
+proxy restrictions, Enterprise access-control rules, or a reverse proxy that
+blocks provisioning endpoints. Start with least privilege, inspect connector
+diagnostics, and widen only the specific read permission that remains UNKNOWN.
+
 When a shared Grafana stores a Prometheus datasource URL that differs from the
 endpoint MoniCheck can reach, set `prometheus_datasource_uid` on the
 Prometheus YAML connector. The initial YAML contract requires exactly one
@@ -66,7 +75,7 @@ Both aggregate audits and scoped finding queries also include deterministic `act
 
 Every aggregate audit and Service coverage query includes
 `inventory_visibility`. Observed resources do not prove complete provider,
-folder, pagination, tenant, or organization visibility, so v0.7.1 reports
+folder, pagination, tenant, or organization visibility, so MoniCheck reports
 `NOT_PROVEN_COMPLETE` rather than making an estate-wide claim.
 
 To review an existing Agent audit in the Local UI without contacting providers
@@ -74,10 +83,22 @@ or rerunning analyzers:
 
 ```bash
 monicheck ui --storage-path /path/to/local-state.json
+# Equivalent, more discoverable Local workflow:
+monicheck local --serve-only --storage-path /path/to/local-state.json
 ```
 
 Open the printed `?view=agent` loopback URL. The view reads the same durable
 owner-only state used by MCP queries.
+
+The Agent view renders deterministic action groups and an explicit inventory
+visibility boundary. Coverage renders missing and unknown rows per service and
+signal; UNKNOWN includes the connector command needed to make that evidence
+evaluable, while MISSING can copy a starter `coverage_exceptions` YAML entry.
+
+Version 1 YAML may also declare `coverage_expectations` and time-bounded
+`coverage_exceptions`. Expectation scope supports `ALL_SERVICES`, `SERVICE`,
+`NAMESPACE`, and a bounded `LABEL_SELECTOR` in `key=value` form. These policies
+are persisted before the report is built, so the current scan reflects them.
 
 ## Product Boundary
 

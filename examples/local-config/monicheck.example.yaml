@@ -39,3 +39,25 @@ connectors:
   - type: kubernetes
     name: platform-manifests
     path: ./manifests
+
+# Optional governance policy. Scope can be ALL_SERVICES, SERVICE, NAMESPACE,
+# or LABEL_SELECTOR with a single key=value selector.
+coverage_expectations:
+  - id: production-service-baseline
+    name: Production service baseline
+    scope: LABEL_SELECTOR
+    scope_value: environment=production
+    required_signals: [metrics, dashboards, alerts]
+    owner: sre-platform
+    rationale: Production services require tri-signal operational coverage.
+
+# Exceptions are explicit and time bounded. Copy a starter entry from the
+# Local UI Coverage view, then review owner, reason, and expiry before use.
+coverage_exceptions:
+  - expectation_id: production-service-baseline
+    service_id: CHANGE_ME
+    signal: alerts
+    owner: CHANGE_ME
+    reason: CHANGE_ME
+    created_by: CHANGE_ME
+    expires_at: 2099-01-01T00:00:00Z

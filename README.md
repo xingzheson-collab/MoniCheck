@@ -28,9 +28,9 @@ For any MCP-compatible agent, configure the absolute binary path with the `mcp` 
 
 Then ask the agent to run a read-only observability audit. The Agent Skill enforces evidence rules such as `UNKNOWN` not meaning `MISSING`; an unresolved Grafana datasource variable cannot justify a panel or metric deletion recommendation. See [`docs/agent-native-toolkit.md`](docs/agent-native-toolkit.md).
 
-The `v0.7.1` release adds four bounded need-to-know tools after the aggregate audit: `monicheck.findings.query`, `monicheck.coverage.by_service`, `monicheck.entity.get`, and `monicheck.baseline.diff`. They let an Agent answer a named question such as "Is Redis monitoring healthy?" without dumping the estate. Identifiers appear only inside the user's active scope, every result is capped and reports truncation, and every disclosure is recorded in an owner-only local audit file. Provider credentials, endpoints, labels, raw queries, and raw evidence remain excluded. It also adds explicit inventory visibility, a persisted Agent-audit UI entry, YAML datasource binding, and conservative shared-Grafana dashboard filtering.
+The `v0.7.2` release turns the v0.7.1 query contracts into an actionable Local product. The Agent view renders deterministic action groups and inventory visibility, Coverage lists missing and unknown service signals with concrete next steps, `local --serve-only` reopens durable state without rescanning, and YAML can define scoped coverage expectations and time-bounded exceptions. Generic configuration findings are split into resource-family hygiene backlogs, while datasource-health findings no longer crowd out other findings of the same severity in the Top-20.
 
-> **Release status:** `v0.7.1` is an Agent-native Preview. It includes the
+> **Release status:** `v0.7.2` is an Agent-native Preview. It includes the
 > portable `monicheck-observability-audit` Skill, a local stdio MCP server, and
 > bounded `agent-audit.v1` output while keeping collection and analysis inside
 > the deterministic Local engine. It also retains the `v0.6.6` shared-Grafana
@@ -50,7 +50,7 @@ Prebuilt releases cover both common CPU families. In Go release names,
 | macOS | `arm64` (Apple silicon) | `darwin_arm64.tar.gz` |
 
 Download the matching archive and `SHA256SUMS` from the
-[v0.7.1 Preview Release](https://github.com/xingzheson-collab/MoniCheck/releases/tag/v0.7.1).
+[v0.7.2 Preview Release](https://github.com/xingzheson-collab/MoniCheck/releases/tag/v0.7.2).
 Verify the checksum before running the binary.
 
 ## Quick start
@@ -98,6 +98,8 @@ without rerunning providers:
 
 ```bash
 ./monicheck ui --storage-path ./local-state.json
+# Equivalent Local workflow:
+./monicheck local --serve-only --storage-path ./local-state.json
 ```
 
 For monitoring-gap detection, combine telemetry evidence with an independent

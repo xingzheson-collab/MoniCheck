@@ -154,6 +154,32 @@ func TestAssessDisclosesInferredServiceIdentity(t *testing.T) {
 	}
 }
 
+func TestAssessSupportsNamespaceAndBoundedLabelScopes(t *testing.T) {
+	now := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	services := []model.Resource{
+		{ID: "checkout", Type: model.ResourceTypeService, Name: "checkout", Status: model.ResourceStatusActive, Labels: map[string]string{"namespace": "payments", "environment": "production"}},
+		{ID: "catalog", Type: model.ResourceTypeService, Name: "catalog", Status: model.ResourceStatusActive, Labels: map[string]string{"namespace": "store", "environment": "staging"}},
+	}
+	expectations := []model.CoverageExpectation{
+		{ID: "namespace", Name: "Payments", Scope: model.CoverageScopeNamespace, ScopeValue: "payments", RequiredSignals: []model.CoverageSignal{model.CoverageSignalMetrics}, Owner: "sre", Rationale: "test", Enabled: true},
+		{ID: "label", Name: "Production", Scope: model.CoverageScopeLabel, ScopeValue: "environment=production", RequiredSignals: []model.CoverageSignal{model.CoverageSignalAlerts}, Owner: "sre", Rationale: "test", Enabled: true},
+	}
+	for _, expectation := range expectations {
+		if err := ValidateExpectation(expectation); err != nil {
+			t.Fatalf("valid scope rejected: %v", err)
+		}
+	}
+	summary := Assess(services, nil, expectations, nil, now)
+	if len(summary.Assessments) != 2 || summary.Assessments[0].ServiceID != "checkout" || summary.Assessments[1].ServiceID != "checkout" {
+		t.Fatalf("scoped expectations leaked to unrelated services: %#v", summary.Assessments)
+	}
+	invalid := expectations[1]
+	invalid.ScopeValue = "environment in (production)"
+	if err := ValidateExpectation(invalid); err == nil {
+		t.Fatal("unbounded label selector was accepted")
+	}
+}
+
 func TestRelatedServiceIDsScopesAResourceToItsCoverageGraph(t *testing.T) {
 	ctx := context.Background()
 	store := storage.NewMemoryStore()

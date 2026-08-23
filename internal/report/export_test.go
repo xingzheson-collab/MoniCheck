@@ -64,6 +64,17 @@ func TestBuildGovernanceExportIncludesBoundedPriorityFindingEvidence(t *testing.
 	}
 }
 
+func TestGovernancePriorityDeprioritizesDatasourceHealthWithinSeverity(t *testing.T) {
+	findings := []model.Finding{
+		{ID: "health", Type: "InvalidDatasource", Severity: model.SeverityWarning, Status: model.FindingStatusOpen, RiskScore: &model.FindingRiskScore{Score: 99}},
+		{ID: "coverage", Type: "ServiceObservabilityGap", Severity: model.SeverityWarning, Status: model.FindingStatusOpen, RiskScore: &model.FindingRiskScore{Score: 50}},
+	}
+	got := governancePriorityFindings(findings, 2)
+	if len(got) != 2 || got[0].ID != "coverage" || got[1].ID != "health" {
+		t.Fatalf("datasource health still crowded out other priority work: %#v", got)
+	}
+}
+
 func TestGovernanceExportLocalizesOnlyBuiltInFindingPresentation(t *testing.T) {
 	ctx := context.Background()
 	store := storage.NewMemoryStore()

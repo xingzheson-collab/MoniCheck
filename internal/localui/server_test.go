@@ -74,7 +74,7 @@ func TestLocalUILeadsWithEvidenceCompletenessWhenCoverageIsPartial(t *testing.T)
 	for _, required := range []string{
 		"Evidence completeness",
 		"Evaluable coverage:",
-		"before treating evaluable coverage as estate-wide coverage",
+		"UNKNOWN signals are excluded from the denominator",
 		"coverage_evidence_state",
 	} {
 		if !strings.Contains(script, required) {
@@ -97,9 +97,36 @@ func TestLocalUIExposesPersistedAgentAuditEntry(t *testing.T) {
 			t.Fatalf("Local UI is missing Agent audit navigation %q", required)
 		}
 	}
-	for _, required := range []string{"PERSISTED_AGENT_AUDIT", "does not contact providers or rerun analyzers", "searchParams.set('view'"} {
+	for _, required := range []string{"PERSISTED_AGENT_AUDIT", "does not contact providers or rerun analyzers", "searchParams.set('view'", "action_groups", "inventory_visibility", "coverage?.assessments", "Copy exception YAML", "UNKNOWN signals are excluded from the denominator", "missing.slice(0, 10)", "unknown.slice(0, 10)"} {
 		if !strings.Contains(string(script), required) {
 			t.Fatalf("Local UI is missing persisted Agent behavior %q", required)
 		}
+	}
+}
+
+func TestAgentAuditEndpointIsReadOnlyAndNoStore(t *testing.T) {
+	store := storage.NewMemoryStore()
+	createdAt := time.Date(2026, 8, 23, 10, 0, 0, 0, time.UTC)
+	if err := store.ReportExports.Save(context.Background(), model.ReportExport{
+		ID: "report", Type: "governance", Format: "json", Origin: report.LocalPostureSnapshotOrigin,
+		ContentType: "application/json", Content: `{"resource_count":0,"finding_count":0}`, CreatedAt: createdAt,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	runtime := &localruntime.Runtime{Store: store, Execution: model.ExecutionResult{
+		ID: "execution", Status: model.ExecutionStatusSucceeded, StartedAt: createdAt.Add(-time.Second), FinishedAt: createdAt,
+	}}
+	server := New("127.0.0.1:0", runtime)
+	recorder := httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/local/agent-audit", nil))
+	if recorder.Code != http.StatusOK || recorder.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("unexpected response: status=%d headers=%v body=%s", recorder.Code, recorder.Header(), recorder.Body.String())
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(recorder.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["contract_version"] != "agent-audit.v1" {
+		t.Fatalf("unexpected contract: %#v", payload)
 	}
 }

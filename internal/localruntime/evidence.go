@@ -44,6 +44,10 @@ func (r *Runtime) EvidenceBundle(ctx context.Context) (evidence.Bundle, error) {
 	if err != nil {
 		return evidence.Bundle{}, err
 	}
+	statuses := []model.ConnectorStatus{}
+	if r.Engine != nil {
+		statuses = r.Engine.ConnectorStatuses()
+	}
 	bundle := evidence.Bundle{
 		ContractVersion: evidence.ContractVersion,
 		BundleID:        evidence.AnonymousID("bundle", r.Execution.ID, export.ID),
@@ -53,7 +57,7 @@ func (r *Runtime) EvidenceBundle(ctx context.Context) (evidence.Bundle, error) {
 		Summary:         evidence.Summary{ResourceCount: summary.ResourceCount, FindingCount: summary.FindingCount, OpenFindingCount: summary.OpenFindingCount, CriticalCount: summary.CriticalCount, WarningCount: summary.WarningCount, InfoCount: summary.InfoCount},
 		Coverage:        evidence.Coverage{ServiceCount: summary.CoverageServiceCount, Percent: summary.CoveragePercent, MissingSignals: summary.CoverageMissingSignals, UnknownSignals: summary.CoverageUnknownSignals, EvaluableSignals: summary.CoverageEvaluableSignals, EvidenceState: summary.CoverageEvidenceState, EvidenceCompletenessPercent: summary.CoverageEvidenceCompletenessPercent},
 		Cost:            summary.Cost,
-		Connectors:      connectorEvidence(r.Engine.ConnectorStatuses()),
+		Connectors:      connectorEvidence(statuses),
 		Findings:        findingEvidence(findings),
 	}
 	bundle.Normalize()

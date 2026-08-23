@@ -160,6 +160,24 @@ func TestGrafanaDefaultDatasourceAndUnlinkedPrometheusAreVisible(t *testing.T) {
 	}
 }
 
+func TestGrafanaDatasourceVariableCurrentIsRecordedAsApproximateOnly(t *testing.T) {
+	variable := grafanaVariable{Name: "datasource", Type: "datasource"}
+	variable.Current.Value = "prom-main"
+	metadata := map[string]string{}
+	addGrafanaVariableCurrentMetadata(metadata, grafanaPanel{
+		Datasource: grafanaRef{UID: "$datasource"},
+		Targets:    []grafanaTarget{{Expression: "up"}},
+	}, []grafanaVariable{variable})
+	if metadata[model.MetadataPanelDatasourceResolvedFrom] != "variable_current" ||
+		metadata[model.MetadataPanelDatasourceVariableCurrentUID] != "prom-main" ||
+		metadata[model.MetadataPanelDatasourceResolutionConfidence] != "APPROXIMATE" {
+		t.Fatalf("variable current provenance was not retained: %#v", metadata)
+	}
+	if got := summarizeGrafanaPanelDatasources(grafanaPanel{Datasource: grafanaRef{UID: "$datasource"}, Targets: []grafanaTarget{{Expression: "up"}}}, nil); got.dynamicQueryCount != 1 || got.resolvedQueryCount != 0 {
+		t.Fatalf("approximate variable current became deterministic attribution: %#v", got)
+	}
+}
+
 func TestGrafanaConnectorUsesBasicAuthForPrivateIngress(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		username, password, ok := r.BasicAuth()

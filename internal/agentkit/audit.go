@@ -7,6 +7,7 @@ import (
 
 	"monicheck/internal/localruntime"
 	"monicheck/internal/report"
+	"monicheck/internal/storage"
 	"monicheck/pkg/evidence"
 )
 
@@ -23,6 +24,41 @@ type Gate struct {
 	RegressedMetrics []string                 `json:"regressed_metrics"`
 	ImprovedMetrics  []string                 `json:"improved_metrics"`
 	FindingDiff      *report.LocalFindingDiff `json:"finding_diff,omitempty"`
+}
+
+// BuildExisting rebuilds the Agent-facing audit from durable Local state. It
+// never contacts providers or runs analyzers.
+func BuildExisting(ctx context.Context, runtime *localruntime.Runtime) (Audit, error) {
+	regression, err := report.BuildLocalRegression(ctx, runtime.Store)
+	if err != nil {
+		return Audit{}, err
+	}
+	bundle, err := runtime.EvidenceBundle(ctx)
+	if err != nil {
+		return Audit{}, err
+	}
+	audit := Build(bundle, regression, 0)
+	resources, err := runtime.Store.Resources.List(ctx, storage.ResourceFilter{})
+	if err != nil {
+		return Audit{}, err
+	}
+	relationships, err := runtime.Store.Relationships.List(ctx)
+	if err != nil {
+		return Audit{}, err
+	}
+	audit.InventoryVisibility.ObservedResourceCount = len(resources)
+	audit.InventoryVisibility.ObservedRelationshipCount = len(relationships)
+	audit.InventoryVisibility.Basis = "Counts are rebuilt from the persisted Local audit. Provider permission, pagination, tenant, and folder completeness remain unverified."
+	ownedResources := 0
+	for _, resource := range resources {
+		if resource.Labels["team"] != "" || resource.Labels["owner"] != "" {
+			ownedResources++
+		}
+	}
+	if ownedResources == 0 && len(resources) > 0 {
+		audit.InventoryVisibility.OwnershipGuidance = "No team or owner labels were observed. Assign action groups by source and resource family first; add ownership labels before treating team-level counts as authoritative."
+	}
+	return audit, nil
 }
 
 type FindingGroup struct {
@@ -48,6 +84,7 @@ type InventoryVisibility struct {
 	ObservedRelationshipCount int      `json:"observed_relationship_count"`
 	UnverifiedDimensions      []string `json:"unverified_dimensions"`
 	Basis                     string   `json:"basis"`
+	OwnershipGuidance         string   `json:"ownership_guidance,omitempty"`
 }
 
 type Audit struct {

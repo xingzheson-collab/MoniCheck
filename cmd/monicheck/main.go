@@ -100,6 +100,7 @@ func runLocal(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 	fs.SetOutput(stderr)
 	opts := localruntime.Options{}
 	check := false
+	serveOnly := false
 	format, reportOut, bundleOut := "text", "", ""
 	fs.StringVar(&opts.Listen, "listen", "127.0.0.1:8080", "loopback address for the Local UI")
 	fs.StringVar(&opts.StoragePath, "storage-path", defaultStoragePath(), "durable local state file")
@@ -111,6 +112,7 @@ func runLocal(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 	fs.StringVar(&opts.AlertmanagerURL, "alertmanager-url", os.Getenv("MONICHECK_ALERTMANAGER_URL"), "Alertmanager endpoint")
 	fs.StringVar(&opts.KubernetesManifest, "kubernetes-manifest", os.Getenv("MONICHECK_KUBERNETES_MANIFEST_PATH"), "manifest file or directory")
 	fs.BoolVar(&check, "check", false, "scan once and exit")
+	fs.BoolVar(&serveOnly, "serve-only", false, "open completed state without contacting providers or running analyzers")
 	fs.StringVar(&format, "format", "text", "check output: text or json")
 	fs.StringVar(&reportOut, "report-out", "", "write governance JSON to a private file")
 	fs.StringVar(&bundleOut, "bundle-out", "", "write privacy-safe evidence-bundle.v1 to a private file")
@@ -120,6 +122,13 @@ func runLocal(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 	if !check && (strings.TrimSpace(reportOut) != "" || strings.TrimSpace(bundleOut) != "") {
 		fmt.Fprintln(stderr, "--report-out and --bundle-out require --check")
 		return 2
+	}
+	if serveOnly {
+		if check || strings.TrimSpace(reportOut) != "" || strings.TrimSpace(bundleOut) != "" {
+			fmt.Fprintln(stderr, "--serve-only cannot be combined with --check, --report-out, or --bundle-out")
+			return 2
+		}
+		return serveExisting(ctx, opts.Listen, opts.StoragePath, stdout, stderr)
 	}
 	if err := localruntime.ValidateOptions(opts); err != nil {
 		fmt.Fprintln(stderr, err)
@@ -187,6 +196,25 @@ func runLocal(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 	server := localui.New(opts.Listen, runtime)
 	if err := server.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		fmt.Fprintf(stderr, "serve local UI: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+func serveExisting(ctx context.Context, listen, storagePath string, stdout, stderr io.Writer) int {
+	if err := localruntime.ValidateViewOptions(listen, storagePath); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	runtime, err := localruntime.OpenExisting(ctx, storagePath)
+	if err != nil {
+		fmt.Fprintf(stderr, "open audit state: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "MoniCheck persisted Local UI: http://%s/ui/static/?view=agent\nState: %s\nNo providers contacted; no analyzers rerun.\n", listen, storagePath)
+	server := localui.New(listen, runtime)
+	if err := server.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+		fmt.Fprintf(stderr, "serve audit UI: %v\n", err)
 		return 1
 	}
 	return 0

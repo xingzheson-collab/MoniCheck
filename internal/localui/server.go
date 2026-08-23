@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"monicheck/internal/agentkit"
 	"monicheck/internal/localruntime"
 	"monicheck/internal/model"
 )
@@ -49,8 +50,24 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/ui/static/", http.StatusFound) })
 	mux.HandleFunc("/api/v1/local/report", s.report)
 	mux.HandleFunc("/api/v1/local/status", s.status)
+	mux.HandleFunc("/api/v1/local/agent-audit", s.agentAudit)
 	mux.HandleFunc("/api/v1/local/activation-receipt", s.activationReceipt)
 	return securityHeaders(mux)
+}
+
+func (s *Server) agentAudit(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	audit, err := agentkit.BuildExisting(r.Context(), s.runtime)
+	if err != nil {
+		http.Error(w, "agent audit unavailable", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(audit)
 }
 func (s *Server) report(w http.ResponseWriter, r *http.Request) {
 	export, err := s.runtime.LatestReport(r.Context())

@@ -1,6 +1,6 @@
 # RFC-0329: Persisted Agent Audit UI
 
-Status: Implemented for v0.7.1
+Status: Expanded for v0.7.2
 
 ## Problem
 
@@ -9,9 +9,16 @@ for reviewing the same persisted result.
 
 ## Decision
 
-`monicheck ui --storage-path <path>` opens an existing completed Local state
+`monicheck ui --storage-path <path>` and the discoverable alias
+`monicheck local --serve-only --storage-path <path>` open completed Local state
 without contacting providers or rerunning analyzers. The loopback UI adds an
-`Agent audit` view and reports `PERSISTED_AGENT_AUDIT` as its state source.
+`Agent audit` view, reports `PERSISTED_AGENT_AUDIT` as its state source, and
+renders deterministic action groups plus inventory visibility from durable
+state.
+
+The Coverage view renders top missing and unknown service-signal rows, names
+the denominator, provides evidence-source commands for UNKNOWN, links to Agent
+actions, and can copy a time-bounded YAML exception template for MISSING.
 
 ## Boundaries
 
@@ -23,4 +30,5 @@ without contacting providers or rerunning analyzers. The loopback UI adds an
 ## Verification
 
 Runtime and Local UI contract tests prove persisted-state loading, the Agent
-deep link, and the no-rerun explanation.
+deep link, the read-only audit endpoint, action/visibility rendering, coverage
+honesty copy, and the no-rerun explanation.

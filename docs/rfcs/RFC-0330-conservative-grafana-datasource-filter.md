@@ -1,6 +1,6 @@
 # RFC-0330: Conservative Grafana Datasource Filter
 
-Status: Implemented for v0.7.1
+Status: Expanded for v0.7.2
 
 ## Problem
 
@@ -18,6 +18,12 @@ is retained as `UNKNOWN`.
 
 The connector emits included, excluded, and unknown counts plus
 `unknown_policy=retain`.
+
+When a datasource variable has a persisted static `current.value`, v0.7.2
+records `resolved_from=variable_current` with `APPROXIMATE` confidence. This is
+useful context for a human or Agent, but it does not create deterministic graph
+attribution and cannot justify deletion. The dashboard remains UNKNOWN for
+exclusion decisions.
 
 ## Boundaries
 

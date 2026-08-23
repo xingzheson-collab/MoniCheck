@@ -77,6 +77,15 @@ func New(ctx context.Context, o Options) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
+	if strings.TrimSpace(o.ConfigPath) != "" {
+		cfg, loadErr := LoadFileConfig(o.ConfigPath)
+		if loadErr != nil {
+			return nil, fmt.Errorf("load --config: %w", loadErr)
+		}
+		if applyErr := applyCoverageConfig(ctx, store, cfg, time.Now().UTC()); applyErr != nil {
+			return nil, fmt.Errorf("apply coverage config: %w", applyErr)
+		}
+	}
 	if _, err := report.SaveLocalPostureSnapshot(ctx, store, executionResult); err != nil {
 		return nil, err
 	}

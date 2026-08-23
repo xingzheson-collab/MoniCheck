@@ -340,6 +340,10 @@ func governancePriorityFindings(findings []model.Finding, limit int) []governanc
 		if leftSeverity != rightSeverity {
 			return leftSeverity < rightSeverity
 		}
+		leftHealth, rightHealth := datasourceHealthFinding(open[i]), datasourceHealthFinding(open[j])
+		if leftHealth != rightHealth {
+			return !leftHealth
+		}
 		leftRisk, rightRisk := findingRiskScore(open[i]), findingRiskScore(open[j])
 		if leftRisk != rightRisk {
 			return leftRisk > rightRisk
@@ -364,6 +368,10 @@ func governancePriorityFindings(findings []model.Finding, limit int) []governanc
 		result = append(result, item)
 	}
 	return result
+}
+
+func datasourceHealthFinding(finding model.Finding) bool {
+	return finding.Type == "InvalidDatasource" || finding.Type == "InvalidDatasourceType"
 }
 
 func findingRiskScore(finding model.Finding) int {

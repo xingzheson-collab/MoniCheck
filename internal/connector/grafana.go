@@ -310,6 +310,7 @@ func (c *GrafanaConnector) Sync(ctx context.Context) (Snapshot, error) {
 			addGrafanaPanelGridMetadata(panelResource.Metadata, panel.GridPos)
 			addGrafanaPanelDisplayMetadata(panelResource.Metadata, panel)
 			addGrafanaPanelDatasourceMetadata(panelResource.Metadata, panel, datasourceByUID)
+			addGrafanaVariableCurrentMetadata(panelResource.Metadata, panel, detail.Dashboard.Templating.List)
 			if panel.Type != "" {
 				panelResource.Metadata[model.MetadataVisualizationType] = panel.Type
 			}
@@ -1492,6 +1493,10 @@ type grafanaVariable struct {
 	Type       string     `json:"type"`
 	Datasource grafanaRef `json:"datasource"`
 	Query      any        `json:"query"`
+	Current    struct {
+		Text  any `json:"text"`
+		Value any `json:"value"`
+	} `json:"current"`
 }
 
 type grafanaPanel struct {

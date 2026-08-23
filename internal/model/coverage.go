@@ -18,6 +18,8 @@ type CoverageExpectationScope string
 const (
 	CoverageScopeAllServices CoverageExpectationScope = "ALL_SERVICES"
 	CoverageScopeService     CoverageExpectationScope = "SERVICE"
+	CoverageScopeNamespace   CoverageExpectationScope = "NAMESPACE"
+	CoverageScopeLabel       CoverageExpectationScope = "LABEL_SELECTOR"
 )
 
 const BuiltinServiceCoverageExpectationID = "builtin.service-baseline"

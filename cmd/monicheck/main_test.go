@@ -63,6 +63,14 @@ func TestBundleOutRequiresExplicitCheckMode(t *testing.T) {
 	}
 }
 
+func TestRunLocalServeOnlyRejectsScanOutputs(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := runLocal(context.Background(), []string{"--serve-only", "--check"}, &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), "--serve-only cannot be combined") {
+		t.Fatalf("unexpected result: code=%d stderr=%q", code, stderr.String())
+	}
+}
+
 func TestConnectorListIncludesEvidenceSources(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	if code := runConnectors([]string{"list"}, &stdout, &stderr); code != 0 {

@@ -11,12 +11,38 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"monicheck/internal/connector"
+	coveragepkg "monicheck/internal/coverage"
 	"monicheck/internal/model"
+	"monicheck/internal/storage"
 )
 
 type FileConfig struct {
-	Version    int             `yaml:"version"`
-	Connectors []ConnectorSpec `yaml:"connectors"`
+	Version              int                       `yaml:"version"`
+	Connectors           []ConnectorSpec           `yaml:"connectors"`
+	CoverageExpectations []CoverageExpectationSpec `yaml:"coverage_expectations"`
+	CoverageExceptions   []CoverageExceptionSpec   `yaml:"coverage_exceptions"`
+}
+
+type CoverageExpectationSpec struct {
+	ID              string   `yaml:"id"`
+	Name            string   `yaml:"name"`
+	Scope           string   `yaml:"scope"`
+	ScopeValue      string   `yaml:"scope_value"`
+	RequiredSignals []string `yaml:"required_signals"`
+	Owner           string   `yaml:"owner"`
+	Rationale       string   `yaml:"rationale"`
+	Enabled         *bool    `yaml:"enabled"`
+}
+
+type CoverageExceptionSpec struct {
+	ID            string `yaml:"id"`
+	ExpectationID string `yaml:"expectation_id"`
+	ServiceID     string `yaml:"service_id"`
+	Signal        string `yaml:"signal"`
+	Owner         string `yaml:"owner"`
+	Reason        string `yaml:"reason"`
+	CreatedBy     string `yaml:"created_by"`
+	ExpiresAt     string `yaml:"expires_at"`
 }
 
 type ConnectorSpec struct {
@@ -120,9 +146,59 @@ func LoadFileConfig(path string) (FileConfig, error) {
 		return FileConfig{}, fmt.Errorf("connector config version must be 1")
 	}
 	if len(cfg.Connectors) == 0 {
-		return FileConfig{}, fmt.Errorf("connector config must contain at least one connector")
+		return FileConfig{}, fmt.Errorf("config must contain at least one connector")
 	}
 	return cfg, nil
+}
+
+func applyCoverageConfig(ctx context.Context, store *storage.Store, cfg FileConfig, now time.Time) error {
+	expectations, err := store.CoverageExpectations.List(ctx)
+	if err != nil {
+		return err
+	}
+	for index, spec := range cfg.CoverageExpectations {
+		enabled := true
+		if spec.Enabled != nil {
+			enabled = *spec.Enabled
+		}
+		signals := make([]model.CoverageSignal, 0, len(spec.RequiredSignals))
+		for _, signal := range spec.RequiredSignals {
+			signals = append(signals, model.CoverageSignal(strings.ToLower(strings.TrimSpace(signal))))
+		}
+		expectation := model.CoverageExpectation{
+			ID: strings.TrimSpace(spec.ID), Name: strings.TrimSpace(spec.Name), Scope: model.CoverageExpectationScope(strings.ToUpper(strings.TrimSpace(spec.Scope))),
+			ScopeValue: strings.TrimSpace(spec.ScopeValue), RequiredSignals: signals, Owner: strings.TrimSpace(spec.Owner), Rationale: strings.TrimSpace(spec.Rationale),
+			Enabled: enabled, CreatedBy: "local-config", CreatedAt: now, UpdatedBy: "local-config", UpdatedAt: now,
+		}
+		if err := coveragepkg.ValidateExpectation(expectation); err != nil {
+			return fmt.Errorf("coverage_expectations[%d]: %w", index, err)
+		}
+		if err := store.CoverageExpectations.Save(ctx, expectation); err != nil {
+			return err
+		}
+		expectations = append(expectations, expectation)
+	}
+	for index, spec := range cfg.CoverageExceptions {
+		expiresAt, err := time.Parse(time.RFC3339, strings.TrimSpace(spec.ExpiresAt))
+		if err != nil {
+			return fmt.Errorf("coverage_exceptions[%d].expires_at must be RFC3339", index)
+		}
+		exception := model.CoverageException{
+			ID: strings.TrimSpace(spec.ID), ExpectationID: strings.TrimSpace(spec.ExpectationID), ServiceID: strings.TrimSpace(spec.ServiceID),
+			Signal: model.CoverageSignal(strings.ToLower(strings.TrimSpace(spec.Signal))), Owner: strings.TrimSpace(spec.Owner), Reason: strings.TrimSpace(spec.Reason),
+			CreatedBy: strings.TrimSpace(spec.CreatedBy), CreatedAt: now, ExpiresAt: expiresAt,
+		}
+		if exception.ID == "" {
+			exception.ID = model.StableID("coverage_exception", exception.ExpectationID, exception.ServiceID, string(exception.Signal))
+		}
+		if err := coveragepkg.ValidateException(exception, expectations, now); err != nil {
+			return fmt.Errorf("coverage_exceptions[%d]: %w", index, err)
+		}
+		if err := store.CoverageExceptions.Save(ctx, exception); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func buildConfiguredConnectors(cfg FileConfig) ([]connector.Connector, error) {

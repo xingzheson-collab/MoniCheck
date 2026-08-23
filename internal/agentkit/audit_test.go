@@ -39,7 +39,7 @@ func TestBuildProducesBoundedPrivacySafeAgentSummary(t *testing.T) {
 	if got.Connectors[0].InstanceRef != "connector_anon" || got.Summary.ResourceCount != 42 {
 		t.Fatalf("evidence summary was not preserved: %#v", got)
 	}
-	if len(got.ActionGroups) != 1 || got.ActionGroups[0].Family != "configuration-risk" || got.ActionGroups[0].FindingCount != 30 {
+	if len(got.ActionGroups) != 1 || got.ActionGroups[0].Family != "hygiene-backlog/metric" || got.ActionGroups[0].FindingCount != 30 {
 		t.Fatalf("deterministic action grouping missing: %#v", got.ActionGroups)
 	}
 	if got.ActionGroups[0].Consequence == "" || got.ActionGroups[0].FirstStep == "" || got.ActionGroups[0].Verification == "" {

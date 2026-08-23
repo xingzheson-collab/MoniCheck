@@ -12,6 +12,7 @@ import (
 	"monicheck/internal/connector"
 	"monicheck/internal/contract"
 	"monicheck/internal/model"
+	"monicheck/internal/storage"
 )
 
 func TestLoadAndValidateMultiConnectorConfig(t *testing.T) {
@@ -104,6 +105,43 @@ connectors:
 `)
 	if _, err := ValidateFileConfig(invalid); err == nil || !strings.Contains(err.Error(), "valid only for grafana") {
 		t.Fatalf("non-Grafana datasource filter did not fail closed: %v", err)
+	}
+}
+
+func TestYAMLCoverageExpectationsAndExceptionsAreStrict(t *testing.T) {
+	path := writeConfig(t, `version: 1
+connectors:
+  - type: prometheus
+    url: https://prometheus.example
+coverage_expectations:
+  - id: prod-services
+    name: Production service baseline
+    scope: LABEL_SELECTOR
+    scope_value: environment=production
+    required_signals: [metrics, dashboards, alerts]
+    owner: sre
+    rationale: Production services require tri-signal coverage.
+coverage_exceptions:
+  - expectation_id: prod-services
+    service_id: service-checkout
+    signal: alerts
+    owner: checkout
+    reason: Migration window
+    created_by: sre
+    expires_at: 2099-01-01T00:00:00Z
+`)
+	cfg, err := LoadFileConfig(path)
+	if err != nil {
+		t.Fatalf("load coverage config: %v", err)
+	}
+	store := storage.NewMemoryStore()
+	if err := applyCoverageConfig(context.Background(), store, cfg, time.Now().UTC()); err != nil {
+		t.Fatalf("apply coverage config: %v", err)
+	}
+	expectations, _ := store.CoverageExpectations.List(context.Background())
+	exceptions, _ := store.CoverageExceptions.List(context.Background())
+	if len(expectations) != 2 || expectations[1].Scope != model.CoverageScopeLabel || len(exceptions) != 1 {
+		t.Fatalf("coverage config was not persisted: expectations=%#v exceptions=%#v", expectations, exceptions)
 	}
 }
 
