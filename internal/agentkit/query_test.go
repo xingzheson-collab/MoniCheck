@@ -48,8 +48,15 @@ func TestNeedToKnowQueriesAnswerOneServiceWithoutRawEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("query coverage: %v", err)
 	}
-	if coverageResult.Service.ID != service.ID || len(coverageResult.Assessments) != 1 {
+	if coverageResult.Service.ID != service.ID || len(coverageResult.Assessments) != 2 {
 		t.Fatalf("unexpected service coverage: %#v", coverageResult)
+	}
+	expectationIDs := map[string]bool{}
+	for _, assessment := range coverageResult.Assessments {
+		expectationIDs[assessment.ExpectationID] = true
+	}
+	if !expectationIDs[model.BuiltinServiceCoverageExpectationID] || !expectationIDs["redis-team-baseline"] {
+		t.Fatalf("coverage query omitted a custom expectation: %#v", coverageResult.Assessments)
 	}
 	if coverageResult.Visibility.State != "NOT_PROVEN_COMPLETE" {
 		t.Fatalf("service query hid inventory uncertainty: %#v", coverageResult.Visibility)
@@ -160,6 +167,14 @@ func seedQueryState(t *testing.T, ctx context.Context) (string, model.Resource, 
 		if err := store.Resources.Upsert(ctx, resource); err != nil {
 			t.Fatalf("save resource: %v", err)
 		}
+	}
+	if err := store.CoverageExpectations.Save(ctx, model.CoverageExpectation{
+		ID: "redis-team-baseline", Name: "Redis team baseline", Scope: model.CoverageScopeService,
+		ScopeValue: service.ID, RequiredSignals: []model.CoverageSignal{model.CoverageSignalMetrics},
+		Owner: "redis-team", Rationale: "Redis requires explicit metrics coverage", Enabled: true,
+		CreatedBy: "test", CreatedAt: now, UpdatedBy: "test", UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("save custom coverage expectation: %v", err)
 	}
 	if err := store.Relationships.Upsert(ctx, model.Relationship{
 		ID: "target-belongs-service", FromID: target.ID, ToID: service.ID, Type: model.RelationshipBelongsTo, CreatedAt: now,

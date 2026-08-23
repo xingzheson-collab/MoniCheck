@@ -59,8 +59,12 @@ func TestGrafanaConnectorSync(t *testing.T) {
 	if snapshot.Partial {
 		t.Fatal("expected successful empty optional endpoints to produce a complete snapshot")
 	}
-	if len(snapshot.Diagnostics) != 11 {
-		t.Fatalf("expected dashboard-search, dashboard-detail, datasource-link, datasource-health, and seven optional diagnostics, got %#v", snapshot.Diagnostics)
+	if len(snapshot.Diagnostics) != 12 {
+		t.Fatalf("expected dashboard-search, inventory-visibility, dashboard-detail, datasource-link, datasource-health, and seven optional diagnostics, got %#v", snapshot.Diagnostics)
+	}
+	visibility := findGrafanaDiagnostic(t, snapshot.Diagnostics, "grafana_inventory_visibility")
+	if visibility.Metadata["credential_role"] != "UNVERIFIED" || visibility.Metadata["folder_reachability"] != "NOT_PROVEN_COMPLETE" || visibility.Metadata["recommended_role"] != "Admin" || visibility.Metadata["observed_folder_count"] != "1" {
+		t.Fatalf("Grafana ACL uncertainty was not diagnosed: %#v", visibility)
 	}
 	for _, diagnostic := range snapshot.Diagnostics {
 		if diagnostic.Status != model.ExecutionStatusSucceeded {
@@ -311,14 +315,20 @@ func TestGrafanaConnectorContinuesWhenOptionalAlertingEndpointsAreUnavailable(t 
 	if !snapshot.Partial {
 		t.Fatal("expected unavailable optional alerting endpoints to mark snapshot partial")
 	}
-	if len(snapshot.Diagnostics) != 10 {
-		t.Fatalf("expected dashboard-search, dashboard-detail, datasource-health, and seven optional diagnostics, got %#v", snapshot.Diagnostics)
+	if len(snapshot.Diagnostics) != 11 {
+		t.Fatalf("expected dashboard-search, inventory-visibility, dashboard-detail, datasource-health, and seven optional diagnostics, got %#v", snapshot.Diagnostics)
 	}
 	foundEndpointError := false
 	foundDashboardSearchSuccess := false
 	foundDashboardDetailSuccess := false
 	foundDatasourceHealthSuccess := false
 	for _, diagnostic := range snapshot.Diagnostics {
+		if diagnostic.ID == "grafana_inventory_visibility" {
+			if diagnostic.Status != model.ExecutionStatusSucceeded || diagnostic.Metadata["folder_reachability"] != "NOT_PROVEN_COMPLETE" {
+				t.Fatalf("unexpected inventory-visibility diagnostic: %#v", diagnostic)
+			}
+			continue
+		}
 		if diagnostic.ID == "grafana_dashboard_search" {
 			if diagnostic.Status != model.ExecutionStatusSucceeded || diagnostic.Metadata["unique_item_count"] != "0" {
 				t.Fatalf("expected empty dashboard-search discovery success, got %#v", diagnostic)

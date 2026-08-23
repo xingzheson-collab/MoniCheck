@@ -27,3 +27,11 @@ the basis for the state.
 
 Contract tests require `NOT_PROVEN_COMPLETE` in aggregate and scoped coverage
 results.
+
+## v0.7.3 Provider Diagnostic
+
+Grafana now reports observed folder/dashboard counts together with
+`credential_role=UNVERIFIED` and
+`folder_reachability=NOT_PROVEN_COMPLETE`. Local UI guidance asks for an Admin
+service-account comparison. This is a correction path, not a claim that Admin
+access proves every tenant, organization, or page complete.

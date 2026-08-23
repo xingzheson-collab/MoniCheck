@@ -12,6 +12,7 @@ import (
 
 	"monicheck/internal/connector"
 	coveragepkg "monicheck/internal/coverage"
+	"monicheck/internal/graph"
 	"monicheck/internal/model"
 	"monicheck/internal/storage"
 )
@@ -156,6 +157,16 @@ func applyCoverageConfig(ctx context.Context, store *storage.Store, cfg FileConf
 	if err != nil {
 		return err
 	}
+	resources, err := store.Resources.List(ctx, storage.ResourceFilter{})
+	if err != nil {
+		return err
+	}
+	relationships, err := store.Relationships.List(ctx)
+	if err != nil {
+		return err
+	}
+	resourceGraph := graph.NewBounded(resources, relationships)
+	pendingExpectations := make([]model.CoverageExpectation, 0, len(cfg.CoverageExpectations))
 	for index, spec := range cfg.CoverageExpectations {
 		enabled := true
 		if spec.Enabled != nil {
@@ -173,11 +184,16 @@ func applyCoverageConfig(ctx context.Context, store *storage.Store, cfg FileConf
 		if err := coveragepkg.ValidateExpectation(expectation); err != nil {
 			return fmt.Errorf("coverage_expectations[%d]: %w", index, err)
 		}
-		if err := store.CoverageExpectations.Save(ctx, expectation); err != nil {
-			return err
+		if expectation.Enabled {
+			summary := coveragepkg.Assess(resources, resourceGraph, []model.CoverageExpectation{expectation}, nil, now)
+			if len(summary.Assessments) == 0 {
+				return fmt.Errorf("coverage_expectations[%d] %q matched 0 active services; check scope and scope_value against the observed Service inventory", index, expectation.ID)
+			}
 		}
-		expectations = append(expectations, expectation)
+		pendingExpectations = append(pendingExpectations, expectation)
+		expectations = replaceCoverageExpectation(expectations, expectation)
 	}
+	pendingExceptions := make([]model.CoverageException, 0, len(cfg.CoverageExceptions))
 	for index, spec := range cfg.CoverageExceptions {
 		expiresAt, err := time.Parse(time.RFC3339, strings.TrimSpace(spec.ExpiresAt))
 		if err != nil {
@@ -194,11 +210,47 @@ func applyCoverageConfig(ctx context.Context, store *storage.Store, cfg FileConf
 		if err := coveragepkg.ValidateException(exception, expectations, now); err != nil {
 			return fmt.Errorf("coverage_exceptions[%d]: %w", index, err)
 		}
+		summary := coveragepkg.Assess(resources, resourceGraph, expectations, []model.CoverageException{exception}, now)
+		if !coverageExceptionApplied(summary, exception) {
+			return fmt.Errorf("coverage_exceptions[%d] %q matched 0 active service-signal assessments; scan first, then copy the exact service_id and verify the expectation scope", index, exception.ID)
+		}
+		pendingExceptions = append(pendingExceptions, exception)
+	}
+	for _, expectation := range pendingExpectations {
+		if err := store.CoverageExpectations.Save(ctx, expectation); err != nil {
+			return err
+		}
+	}
+	for _, exception := range pendingExceptions {
 		if err := store.CoverageExceptions.Save(ctx, exception); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func replaceCoverageExpectation(items []model.CoverageExpectation, candidate model.CoverageExpectation) []model.CoverageExpectation {
+	for index := range items {
+		if items[index].ID == candidate.ID {
+			items[index] = candidate
+			return items
+		}
+	}
+	return append(items, candidate)
+}
+
+func coverageExceptionApplied(summary coveragepkg.Summary, exception model.CoverageException) bool {
+	for _, assessment := range summary.Assessments {
+		if assessment.ExpectationID != exception.ExpectationID || assessment.ServiceID != exception.ServiceID {
+			continue
+		}
+		for _, signal := range assessment.Signals {
+			if signal.Signal == exception.Signal && signal.State == coveragepkg.SignalExempt && signal.ExceptionID == exception.ID {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func buildConfiguredConnectors(cfg FileConfig) ([]connector.Connector, error) {

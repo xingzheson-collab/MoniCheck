@@ -135,6 +135,12 @@ coverage_exceptions:
 		t.Fatalf("load coverage config: %v", err)
 	}
 	store := storage.NewMemoryStore()
+	if err := store.Resources.Upsert(context.Background(), model.Resource{
+		ID: "service-checkout", UID: "checkout", Type: model.ResourceTypeService, Name: "checkout",
+		Status: model.ResourceStatusActive, Labels: map[string]string{"environment": "production"},
+	}); err != nil {
+		t.Fatalf("seed service: %v", err)
+	}
 	if err := applyCoverageConfig(context.Background(), store, cfg, time.Now().UTC()); err != nil {
 		t.Fatalf("apply coverage config: %v", err)
 	}
@@ -142,6 +148,67 @@ coverage_exceptions:
 	exceptions, _ := store.CoverageExceptions.List(context.Background())
 	if len(expectations) != 2 || expectations[1].Scope != model.CoverageScopeLabel || len(exceptions) != 1 {
 		t.Fatalf("coverage config was not persisted: expectations=%#v exceptions=%#v", expectations, exceptions)
+	}
+}
+
+func TestCoverageConfigFailsWhenExpectationOrExceptionHasNoEffect(t *testing.T) {
+	ctx := context.Background()
+	store := storage.NewMemoryStore()
+	if err := store.Resources.Upsert(ctx, model.Resource{
+		ID: "service-checkout", UID: "checkout", Type: model.ResourceTypeService, Name: "checkout",
+		Status: model.ResourceStatusActive, Labels: map[string]string{"service": "checkout"},
+	}); err != nil {
+		t.Fatalf("seed service: %v", err)
+	}
+
+	typo := writeConfig(t, `version: 1
+connectors:
+  - type: prometheus
+    url: https://prometheus.example
+coverage_expectations:
+  - id: application-services
+    name: Application service baseline
+    scope: LABEL_SELECTOR
+    scope_value: application=checkout
+    required_signals: [metrics]
+    owner: sre
+    rationale: Checkout requires metrics.
+`)
+	cfg, err := LoadFileConfig(typo)
+	if err != nil {
+		t.Fatalf("load typo config: %v", err)
+	}
+	if err := applyCoverageConfig(ctx, store, cfg, time.Now().UTC()); err == nil || !strings.Contains(err.Error(), "matched 0 active services") {
+		t.Fatalf("no-op expectation did not fail visibly: %v", err)
+	}
+
+	invalidException := writeConfig(t, `version: 1
+connectors:
+  - type: prometheus
+    url: https://prometheus.example
+coverage_expectations:
+  - id: checkout-services
+    name: Checkout service baseline
+    scope: LABEL_SELECTOR
+    scope_value: service=checkout
+    required_signals: [metrics]
+    owner: sre
+    rationale: Checkout requires metrics.
+coverage_exceptions:
+  - expectation_id: checkout-services
+    service_id: service-does-not-exist
+    signal: metrics
+    owner: checkout
+    reason: Migration window
+    created_by: sre
+    expires_at: 2099-01-01T00:00:00Z
+`)
+	cfg, err = LoadFileConfig(invalidException)
+	if err != nil {
+		t.Fatalf("load invalid exception config: %v", err)
+	}
+	if err := applyCoverageConfig(ctx, store, cfg, time.Now().UTC()); err == nil || !strings.Contains(err.Error(), "matched 0 active service-signal assessments") {
+		t.Fatalf("no-op exception did not fail visibly: %v", err)
 	}
 }
 

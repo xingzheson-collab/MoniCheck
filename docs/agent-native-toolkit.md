@@ -78,6 +78,11 @@ Every aggregate audit and Service coverage query includes
 folder, pagination, tenant, or organization visibility, so MoniCheck reports
 `NOT_PROVEN_COMPLETE` rather than making an estate-wide claim.
 
+For shared Grafana, inspect the `grafana_inventory_visibility` diagnostic. The
+credential role remains `UNVERIFIED` and folder reachability remains
+`NOT_PROVEN_COMPLETE` until an operator repeats the audit with an Admin service
+account and compares observed folder/dashboard counts.
+
 To review an existing Agent audit in the Local UI without contacting providers
 or rerunning analyzers:
 
@@ -99,6 +104,12 @@ Version 1 YAML may also declare `coverage_expectations` and time-bounded
 `coverage_exceptions`. Expectation scope supports `ALL_SERVICES`, `SERVICE`,
 `NAMESPACE`, and a bounded `LABEL_SELECTOR` in `key=value` form. These policies
 are persisted before the report is built, so the current scan reflects them.
+
+Coverage intent is validated against the inventory from the same scan. A
+selector matching zero active Services or an exception referencing a Service
+outside its expectation fails visibly. For CLI-only use: scan once, obtain the
+exact Service ID from Coverage or `coverage.by_service`, add the time-bounded
+exception, and scan again.
 
 ## Product Boundary
 

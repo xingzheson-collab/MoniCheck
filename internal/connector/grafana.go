@@ -123,7 +123,7 @@ func (c *GrafanaConnector) Name() string {
 
 func (c *GrafanaConnector) Sync(ctx context.Context) (Snapshot, error) {
 	now := time.Now().UTC()
-	diagnostics := make([]model.Diagnostic, 0, 10)
+	diagnostics := make([]model.Diagnostic, 0, 11)
 
 	datasources, err := c.datasources(ctx)
 	if err != nil {
@@ -136,6 +136,7 @@ func (c *GrafanaConnector) Sync(ctx context.Context) (Snapshot, error) {
 	}
 	dashboards := dashboardSearch.Items
 	diagnostics = append(diagnostics, grafanaDashboardSearchDiagnostic(dashboardSearch))
+	diagnostics = append(diagnostics, grafanaInventoryVisibilityDiagnostic(dashboardSearch))
 	alertRules, available, discoveryErr := c.alertRulesDiscovery(ctx)
 	diagnostics = append(diagnostics, c.optionalDiagnostic("grafana_alert_rules", "Grafana alert rules", "provisioning alert-rules / App Platform alertrules", available, discoveryErr))
 	contactPoints, available, discoveryErr := c.contactPointsDiscovery(ctx)
@@ -952,6 +953,33 @@ func grafanaDashboardSearchDiagnostic(result grafanaDashboardSearchResult) model
 			"invalid_item_count":   strconv.Itoa(result.InvalidItemCount),
 			"truncated":            strconv.FormatBool(result.Truncated),
 			"pagination_stalled":   strconv.FormatBool(result.PaginationStalled),
+		},
+	}
+}
+
+func grafanaInventoryVisibilityDiagnostic(result grafanaDashboardSearchResult) model.Diagnostic {
+	folders := map[string]bool{}
+	for _, item := range result.Items {
+		folder := strings.TrimSpace(item.FolderUID)
+		if folder == "" {
+			folder = strings.TrimSpace(item.FolderTitle)
+		}
+		if folder != "" {
+			folders[folder] = true
+		}
+	}
+	return model.Diagnostic{
+		ID:      "grafana_inventory_visibility",
+		Name:    "Grafana inventory visibility",
+		Status:  model.ExecutionStatusSucceeded,
+		Message: "Grafana inventory was collected, but API results cannot prove that the credential can read every folder. Use an Admin-scoped credential for completeness validation.",
+		Metadata: map[string]string{
+			"credential_role":          "UNVERIFIED",
+			"folder_reachability":      "NOT_PROVEN_COMPLETE",
+			"observed_folder_count":    strconv.Itoa(len(folders)),
+			"observed_dashboard_count": strconv.Itoa(len(result.Items)),
+			"recommended_role":         "Admin",
+			"action":                   "Repeat the audit with a Grafana Admin service account and compare observed folder and dashboard counts.",
 		},
 	}
 }

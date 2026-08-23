@@ -73,8 +73,7 @@ func New(ctx context.Context, o Options) (*Runtime, error) {
 		return nil, err
 	}
 	engine := execution.NewEngine(store, connectors, newRegistry(), logger.New(os.Stderr, o.LogLevel))
-	executionResult, err := engine.Bootstrap(ctx)
-	if err != nil {
+	if err := engine.Sync(ctx); err != nil {
 		return nil, err
 	}
 	if strings.TrimSpace(o.ConfigPath) != "" {
@@ -85,6 +84,10 @@ func New(ctx context.Context, o Options) (*Runtime, error) {
 		if applyErr := applyCoverageConfig(ctx, store, cfg, time.Now().UTC()); applyErr != nil {
 			return nil, fmt.Errorf("apply coverage config: %w", applyErr)
 		}
+	}
+	executionResult, err := engine.RunAnalyzers(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if _, err := report.SaveLocalPostureSnapshot(ctx, store, executionResult); err != nil {
 		return nil, err

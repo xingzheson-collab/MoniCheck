@@ -75,7 +75,7 @@ function actionGroups() {
 function visibility() {
   const item = audit.inventory_visibility || {}
   const dimensions = item.unverified_dimensions || []
-  return `<div class="panel visibility"><div><span class="badge evidence">${escapeHTML(item.state || 'NOT_PROVEN_COMPLETE')}</span><h2>Inventory visibility</h2><p>${escapeHTML(item.basis || '')}</p>${item.ownership_guidance ? `<p class="next">${escapeHTML(item.ownership_guidance)}</p>` : ''}</div><div class="visibility-counts"><strong>${item.observed_resource_count || 0}</strong><span>observed resources</span><strong>${item.observed_relationship_count || 0}</strong><span>relationships</span></div>${dimensions.length ? `<p class="muted">Still unverified: ${dimensions.map(escapeHTML).join(', ')}.</p>` : ''}</div>`
+  return `<div class="panel visibility"><div><span class="badge evidence">${escapeHTML(item.state || 'NOT_PROVEN_COMPLETE')}</span><h2>Inventory visibility</h2><p>${escapeHTML(item.basis || '')}</p>${item.access_guidance ? `<p class="next">${escapeHTML(item.access_guidance)}</p>` : ''}${item.ownership_guidance ? `<p class="next">${escapeHTML(item.ownership_guidance)}</p>` : ''}</div><div class="visibility-counts"><strong>${item.observed_resource_count || 0}</strong><span>observed resources</span><strong>${item.observed_relationship_count || 0}</strong><span>relationships</span></div>${dimensions.length ? `<p class="muted">Still unverified: ${dimensions.map(escapeHTML).join(', ')}.</p>` : ''}</div>`
 }
 
 function coverageRows() {
@@ -142,7 +142,12 @@ function render(view) {
   }
   if (view === 'findings') content.innerHTML = table(report.priority_findings || [], [['Severity', 'severity'], ['Finding', 'type'], ['Resource', 'resource'], ['Risk', 'risk_score'], ['Recommendation', 'recommendation']])
   if (view === 'coverage') content.innerHTML = coverageView()
-  if (view === 'connectors') content.innerHTML = table(status.connectors || [], [['Group', 'group'], ['Connector', 'name'], ['Status', 'status'], ['Resources', 'resource_count'], ['Error', 'error']])
+  if (view === 'connectors') {
+    const connectors = status.connectors || []
+    content.innerHTML = status.state_source === 'PERSISTED_AGENT_AUDIT' && !connectors.length
+      ? '<div class="panel empty"><strong>Live connector status is unavailable in serve-only mode.</strong><p>This view opened persisted audit evidence without contacting providers. Run a normal Local audit to refresh connector health and inventory visibility.</p></div>'
+      : table(connectors, [['Group', 'group'], ['Connector', 'name'], ['Status', 'status'], ['Resources', 'resource_count'], ['Error', 'error']])
+  }
 }
 
 function openView(view) {

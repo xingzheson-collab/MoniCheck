@@ -50,10 +50,17 @@ func BuildExisting(ctx context.Context, runtime *localruntime.Runtime) (Audit, e
 	audit.InventoryVisibility.ObservedRelationshipCount = len(relationships)
 	audit.InventoryVisibility.Basis = "Counts are rebuilt from the persisted Local audit. Provider permission, pagination, tenant, and folder completeness remain unverified."
 	ownedResources := 0
+	hasGrafanaResource := false
 	for _, resource := range resources {
 		if resource.Labels["team"] != "" || resource.Labels["owner"] != "" {
 			ownedResources++
 		}
+		if resource.Source.System == "grafana" {
+			hasGrafanaResource = true
+		}
+	}
+	if hasGrafanaResource && audit.InventoryVisibility.AccessGuidance == "" {
+		audit.InventoryVisibility.AccessGuidance = grafanaAccessGuidance
 	}
 	if ownedResources == 0 && len(resources) > 0 {
 		audit.InventoryVisibility.OwnershipGuidance = "No team or owner labels were observed. Assign action groups by source and resource family first; add ownership labels before treating team-level counts as authoritative."
@@ -85,7 +92,10 @@ type InventoryVisibility struct {
 	UnverifiedDimensions      []string `json:"unverified_dimensions"`
 	Basis                     string   `json:"basis"`
 	OwnershipGuidance         string   `json:"ownership_guidance,omitempty"`
+	AccessGuidance            string   `json:"access_guidance,omitempty"`
 }
+
+const grafanaAccessGuidance = "Grafana folder ACLs can truncate inventory without an API error. For completeness validation, repeat the audit with an Admin service account and compare observed folder and dashboard counts. Keep the result NOT_PROVEN_COMPLETE until that comparison is reviewed."
 
 type Audit struct {
 	ContractVersion      string                       `json:"contract_version"`
@@ -166,15 +176,23 @@ func Build(bundle evidence.Bundle, regression report.LocalRegressionReport, elap
 
 func inventoryVisibility(connectors []evidence.ConnectorEvidence, observedResources int) InventoryVisibility {
 	relationships := 0
+	hasGrafana := false
 	for _, connector := range connectors {
 		relationships += connector.RelationshipCount
+		if connector.Type == "grafana" {
+			hasGrafana = true
+		}
 	}
-	return InventoryVisibility{
+	result := InventoryVisibility{
 		State: "NOT_PROVEN_COMPLETE", ConnectorCount: len(connectors),
 		ObservedResourceCount: observedResources, ObservedRelationshipCount: relationships,
 		UnverifiedDimensions: []string{"provider permission role", "Grafana folder reachability", "API pagination beyond observed responses", "tenant and organization scope"},
 		Basis:                "MoniCheck can report the inventory it observed, but the current evidence does not independently prove that provider credentials can see the complete estate.",
 	}
+	if hasGrafana {
+		result.AccessGuidance = grafanaAccessGuidance
+	}
+	return result
 }
 
 func groupFindings(findings []evidence.FindingEvidence) []FindingGroup {

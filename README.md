@@ -28,9 +28,9 @@ For any MCP-compatible agent, configure the absolute binary path with the `mcp` 
 
 Then ask the agent to run a read-only observability audit. The Agent Skill enforces evidence rules such as `UNKNOWN` not meaning `MISSING`; an unresolved Grafana datasource variable cannot justify a panel or metric deletion recommendation. See [`docs/agent-native-toolkit.md`](docs/agent-native-toolkit.md).
 
-The `v0.7.2` release turns the v0.7.1 query contracts into an actionable Local product. The Agent view renders deterministic action groups and inventory visibility, Coverage lists missing and unknown service signals with concrete next steps, `local --serve-only` reopens durable state without rescanning, and YAML can define scoped coverage expectations and time-bounded exceptions. Generic configuration findings are split into resource-family hygiene backlogs, while datasource-health findings no longer crowd out other findings of the same severity in the Top-20.
+The `v0.7.3` release makes governance intent fail visibly. A custom expectation must match an active Service, an exception must affect an applicable service-signal assessment, and both are applied before the current scan's analyzers run. Target-job outages are grouped with their broken targets, CRITICAL findings cannot hide in a hygiene backlog, `coverage.by_service` returns all custom assessments, serve-only explains why live connector state is absent, and Grafana reports ACL completeness as unverified with an Admin comparison path.
 
-> **Release status:** `v0.7.2` is an Agent-native Preview. It includes the
+> **Release status:** `v0.7.3` is an Agent-native Preview. It includes the
 > portable `monicheck-observability-audit` Skill, a local stdio MCP server, and
 > bounded `agent-audit.v1` output while keeping collection and analysis inside
 > the deterministic Local engine. It also retains the `v0.6.6` shared-Grafana
@@ -50,7 +50,7 @@ Prebuilt releases cover both common CPU families. In Go release names,
 | macOS | `arm64` (Apple silicon) | `darwin_arm64.tar.gz` |
 
 Download the matching archive and `SHA256SUMS` from the
-[v0.7.2 Preview Release](https://github.com/xingzheson-collab/MoniCheck/releases/tag/v0.7.2).
+[v0.7.3 Preview Release](https://github.com/xingzheson-collab/MoniCheck/releases/tag/v0.7.3).
 Verify the checksum before running the binary.
 
 ## Quick start

@@ -2,6 +2,7 @@ package agentkit
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -47,5 +48,31 @@ func TestBuildProducesBoundedPrivacySafeAgentSummary(t *testing.T) {
 	}
 	if got.InventoryVisibility.State != "NOT_PROVEN_COMPLETE" || len(got.InventoryVisibility.UnverifiedDimensions) == 0 {
 		t.Fatalf("inventory visibility was silently asserted: %#v", got.InventoryVisibility)
+	}
+}
+
+func TestActionGroupsMergeTargetOutageAndKeepCriticalOutOfHygiene(t *testing.T) {
+	bundle := evidence.Bundle{Findings: []evidence.FindingEvidence{
+		{Type: "BrokenTarget", Category: "RELIABILITY", Severity: "CRITICAL", Status: "OPEN", ResourceType: "TARGET"},
+		{Type: "JobWithoutHealthyTarget", Category: "RELIABILITY", Severity: "CRITICAL", Status: "OPEN", ResourceType: "JOB"},
+		{Type: "UnknownCriticalConfig", Category: "RELIABILITY", Severity: "CRITICAL", Status: "OPEN", ResourceType: "JOB"},
+	}}
+	got := Build(bundle, report.LocalRegressionReport{}, time.Second)
+	if len(got.ActionGroups) != 2 {
+		t.Fatalf("unexpected action groups: %#v", got.ActionGroups)
+	}
+	byFamily := map[string]ActionGroup{}
+	for _, group := range got.ActionGroups {
+		byFamily[group.Family] = group
+		if strings.HasPrefix(group.Family, "hygiene-backlog/") && group.Severity == "CRITICAL" {
+			t.Fatalf("critical finding leaked into hygiene backlog: %#v", group)
+		}
+	}
+	outage := byFamily["target-telemetry-loss"]
+	if outage.FindingCount != 2 || len(outage.FindingTypes) != 2 {
+		t.Fatalf("same target outage was not merged: %#v", outage)
+	}
+	if byFamily["configuration-risk"].FindingCount != 1 {
+		t.Fatalf("critical configuration risk was not promoted: %#v", byFamily)
 	}
 }

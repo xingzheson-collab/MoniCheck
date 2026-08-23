@@ -4,7 +4,7 @@ description: Run evidence-backed, read-only observability audits with MoniCheck 
 license: Apache-2.0
 metadata:
   author: MoniCheck
-  version: "0.3.0"
+  version: "0.3.1"
 ---
 
 # MoniCheck Observability Audit
@@ -24,6 +24,9 @@ Use MoniCheck as the deterministic evidence engine. Use the host agent for scope
      the intended datasource. The filter retains variable and unresolved
      dashboards as `UNKNOWN`.
    - `monicheck.audit.run` for a bounded `agent-audit.v1` result.
+     If the audit reports that a coverage expectation or exception matched
+     zero active assessments, show the exact config index and correction path;
+     do not treat the no-op policy as a successful audit.
 4. If MCP is unavailable, run `scripts/run-audit.sh` with a local configuration path or process environment prepared by the user. Do not place internal endpoint values in the Agent command. The script writes owner-only gate and evidence files without exporting raw provider data.
 5. Treat the first successful scan as a baseline. On later scans, lead with new and regressed evidence.
 
@@ -49,6 +52,9 @@ Lead with MoniCheck's deterministic `action_groups` when they are present. Prese
 - Preserve analyzer severity and evidence trust. The model may explain a finding, but must not silently strengthen it.
 - Resource names returned by a need-to-know query are scoped evidence, not permission to disclose adjacent inventory. Follow the returned disclosure block and its truncation state.
 - Read `inventory_visibility` before making a coverage claim. `NOT_PROVEN_COMPLETE` means observed inventory cannot prove estate-wide absence.
+- For shared Grafana, report the observed folder/dashboard counts and the
+  unverified credential role. Recommend an Admin service-account comparison;
+  never state that API success alone proves folder completeness.
 - Never mutate dashboards, rules, collectors, or telemetry systems. MoniCheck Public is read-only.
 
 Read [references/evidence-model.md](references/evidence-model.md) when interpreting ambiguous datasource or coverage evidence. Read [references/report-guide.md](references/report-guide.md) before producing a user-facing audit report.

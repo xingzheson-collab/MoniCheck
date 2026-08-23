@@ -288,11 +288,8 @@ func CoverageByService(ctx context.Context, storagePath string, input CoverageBy
 		}
 	}
 	matchedAssessments := len(assessments)
-	if len(assessments) > defaultQueryLimit {
-		assessments = assessments[:defaultQueryLimit]
-	}
 	scope := map[string]string{"service": input.Service}
-	disclosure, err := recordDisclosure(storagePath, "monicheck.coverage.by_service", purpose, scope, defaultQueryLimit, matchedAssessments, matchedAssessments > len(assessments), []string{"service.id", "service.name"})
+	disclosure, err := recordDisclosure(storagePath, "monicheck.coverage.by_service", purpose, scope, matchedAssessments, matchedAssessments, false, []string{"service.id", "service.name"})
 	if err != nil {
 		return CoverageByServiceResult{}, err
 	}

@@ -98,7 +98,7 @@ func actionGroupsFromFindingGroups(findingGroups []FindingGroup) []ActionGroup {
 	}
 	states := map[string]*groupState{}
 	for _, finding := range findingGroups {
-		family := actionFamily(finding.Type, finding.Category, finding.ResourceType)
+		family := actionFamilyWithSeverity(finding.Type, finding.Category, finding.ResourceType, model.Severity(finding.Severity))
 		state := states[family]
 		if state == nil {
 			template := actionTemplateFor(family)
@@ -139,7 +139,7 @@ func actionGroupsFromQuery(items, disclosedItems []FindingQueryItem) []ActionGro
 	}
 	states := map[string]*groupState{}
 	for _, item := range items {
-		family := actionFamily(item.Type, string(item.Category), string(item.Resource.Type))
+		family := actionFamilyWithSeverity(item.Type, string(item.Category), string(item.Resource.Type), item.Severity)
 		state := states[family]
 		if state == nil {
 			template := actionTemplateFor(family)
@@ -164,7 +164,7 @@ func actionGroupsFromQuery(items, disclosedItems []FindingQueryItem) []ActionGro
 		state.group.FindingTypes = sortedKeys(state.types)
 		resourceIDsAll := map[string]bool{}
 		for _, item := range items {
-			if actionFamily(item.Type, string(item.Category), string(item.Resource.Type)) == state.group.Family {
+			if actionFamilyWithSeverity(item.Type, string(item.Category), string(item.Resource.Type), item.Severity) == state.group.Family {
 				resourceIDsAll[item.Resource.ID] = true
 			}
 		}
@@ -213,7 +213,7 @@ func sortedKeys(values map[string]bool) []string {
 
 func actionFamily(findingType, category, resourceType string) string {
 	switch findingType {
-	case "BrokenTarget", "SlowTargetScrape", "StaleTargetScrape", "TargetScrapeTimeoutRisk":
+	case "BrokenTarget", "JobWithoutHealthyTarget", "SlowTargetScrape", "StaleTargetScrape", "TargetScrapeTimeoutRisk":
 		return "target-telemetry-loss"
 	case "ServiceObservabilityGap", "MissingMonitoringCoverage", "KubernetesServiceWithoutMonitor":
 		return "service-coverage-gap"
@@ -232,4 +232,12 @@ func actionFamily(findingType, category, resourceType string) string {
 		resourceType = "unclassified"
 	}
 	return "hygiene-backlog/" + resourceType
+}
+
+func actionFamilyWithSeverity(findingType, category, resourceType string, severity model.Severity) string {
+	family := actionFamily(findingType, category, resourceType)
+	if strings.HasPrefix(family, "hygiene-backlog/") && severity == model.SeverityCritical {
+		return "configuration-risk"
+	}
+	return family
 }

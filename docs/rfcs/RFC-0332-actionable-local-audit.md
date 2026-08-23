@@ -1,6 +1,6 @@
 # RFC-0332: Actionable Local Audit
 
-Status: Implemented for v0.7.2
+Status: Expanded for v0.7.3
 
 ## Problem
 
@@ -41,3 +41,7 @@ Focused Go tests cover action grouping, read-only audit projection, strict YAML
 policy, scope validation, coverage honesty copy, and CLI flag conflicts. Release
 QA reopens a real persisted audit, checks desktop and mobile layouts, and builds
 all four supported binaries from the reviewed Local-only export.
+
+v0.7.3 adds a dedicated serve-only connector empty state, prevents CRITICAL
+hygiene presentation, and validates that configured expectations and
+exceptions affect the inventory collected by the same scan.

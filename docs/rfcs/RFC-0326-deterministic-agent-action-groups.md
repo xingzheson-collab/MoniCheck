@@ -33,3 +33,10 @@ window, so grouping cannot bypass the query's identifier limit.
 - Query groups inherit the need-to-know disclosure bound and local audit receipt.
 - A one-item result window still reports every action family present in the
   complete matched set without disclosing identifiers outside that window.
+
+## v0.7.3 Correction
+
+`JobWithoutHealthyTarget` is part of `target-telemetry-loss` so a dead job and
+its broken targets do not become separate incident and hygiene work. A generic
+CRITICAL finding is promoted to `configuration-risk`; hygiene backlog is not a
+valid CRITICAL action family.
