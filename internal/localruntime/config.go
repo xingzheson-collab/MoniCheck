@@ -311,7 +311,7 @@ func buildConfiguredConnectors(cfg FileConfig) ([]connector.Connector, error) {
 		if grafanaCount != 1 || grafana == nil {
 			return nil, fmt.Errorf("prometheus_datasource_uid requires exactly one grafana connector")
 		}
-		if err := grafana.ConfigurePrometheusDatasource(binding.spec.URL, binding.spec.PrometheusDatasourceUID); err != nil {
+		if err := grafana.ConfigurePrometheusDatasource(binding.spec.URL, binding.spec.PrometheusDatasourceUID, namespacedConnectorID(binding.base, binding.name)); err != nil {
 			return nil, fmt.Errorf("configure prometheus datasource binding: %w", err)
 		}
 	}
@@ -502,8 +502,11 @@ type namespacedConnector struct {
 }
 
 func namespaceConnector(base connector.Connector, name string) connector.Connector {
+	return &namespacedConnector{base: base, id: namespacedConnectorID(base, name), display: name + " (" + base.Name() + ")"}
+}
+func namespacedConnectorID(base connector.Connector, name string) string {
 	clean := strings.ToLower(regexp.MustCompile(`[^a-zA-Z0-9._-]+`).ReplaceAllString(name, "-"))
-	return &namespacedConnector{base: base, id: base.ID() + ":" + clean, display: name + " (" + base.Name() + ")"}
+	return base.ID() + ":" + clean
 }
 func (c *namespacedConnector) ID() string   { return c.id }
 func (c *namespacedConnector) Name() string { return c.display }
@@ -521,7 +524,7 @@ func (c *namespacedConnector) Sync(ctx context.Context) (connector.Snapshot, err
 	for index := range snapshot.Resources {
 		resource := snapshot.Resources[index]
 		old := resource.ID
-		next := model.StableID("local_connector_resource", c.id, old)
+		next := model.LocalConnectorResourceID(c.id, old)
 		idMap[old] = next
 		resource.ID = next
 		resource.Source.Cluster = c.id

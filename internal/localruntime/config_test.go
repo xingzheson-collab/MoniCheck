@@ -259,6 +259,45 @@ func TestNamespacedGrafanaKeepsCanonicalPrometheusMetricsExternal(t *testing.T) 
 	}
 }
 
+func TestNamespacedGrafanaReferenceMatchesBoundPrometheusInventory(t *testing.T) {
+	now := time.Now().UTC()
+	canonicalMetricID := model.StableID("metric", "prometheus", "https://prometheus.test", "metric:up")
+	prometheusConnectorID := "prometheus:primary"
+	boundMetricID := model.LocalConnectorResourceID(prometheusConnectorID, canonicalMetricID)
+
+	prometheusSnapshot, err := namespaceConnector(staticConnector{id: "prometheus", snapshot: connector.Snapshot{
+		Resources: []model.Resource{{
+			ID: canonicalMetricID, UID: canonicalMetricID, Type: model.ResourceTypeMetric, Name: "up",
+			Source: model.SourceInfo{System: "prometheus", Instance: "https://prometheus.test", ExternalID: "metric:up"},
+			Status: model.ResourceStatusActive, CreatedAt: now, UpdatedAt: now,
+		}},
+	}}, "primary").Sync(context.Background())
+	if err != nil || len(prometheusSnapshot.Resources) != 1 || prometheusSnapshot.Resources[0].ID != boundMetricID {
+		t.Fatalf("unexpected namespaced Prometheus inventory: %#v, %v", prometheusSnapshot.Resources, err)
+	}
+
+	panelID := "panel-1"
+	grafanaSnapshot, err := namespaceConnector(staticConnector{id: "grafana", snapshot: connector.Snapshot{
+		Resources: []model.Resource{{
+			ID: panelID, UID: panelID, Type: model.ResourceTypePanel, Name: "Up",
+			Source: model.SourceInfo{System: "grafana", Instance: "https://grafana.test", ExternalID: "panel:1"},
+			Status: model.ResourceStatusActive, CreatedAt: now, UpdatedAt: now,
+		}},
+		References: []model.Resource{{
+			ID: boundMetricID, UID: boundMetricID, Type: model.ResourceTypeMetric, Name: "up",
+			Source: model.SourceInfo{System: "prometheus", Cluster: prometheusConnectorID, Instance: "https://prometheus.test", ExternalID: "metric:up"},
+			Status: model.ResourceStatusActive, CreatedAt: now, UpdatedAt: now,
+		}},
+		Relationships: []model.Relationship{{
+			ID: "uses", FromID: panelID, ToID: boundMetricID, Type: model.RelationshipUses,
+			Metadata: map[string]string{model.MetadataMetricInventoryBinding: "EXACT"},
+		}},
+	}}, "shared").Sync(context.Background())
+	if err != nil || len(grafanaSnapshot.Relationships) != 1 || grafanaSnapshot.Relationships[0].ToID != prometheusSnapshot.Resources[0].ID {
+		t.Fatalf("Grafana reference did not join the bound Prometheus inventory: %#v, %v", grafanaSnapshot.Relationships, err)
+	}
+}
+
 func TestNamespacedSharedGrafanaTopologyRemainsContractComplete(t *testing.T) {
 	now := time.Now().UTC()
 	metricID := model.StableID("metric", "prometheus", "https://prometheus.test", "metric:node_cpu_seconds_total")

@@ -48,7 +48,7 @@ func TestGrafanaConnectorSync(t *testing.T) {
 		t.Fatalf("new connector: %v", err)
 	}
 	connector.client = testHTTPClient(handler)
-	if err := connector.ConfigurePrometheusDatasource("https://prometheus-public.test", "prom"); err != nil {
+	if err := connector.ConfigurePrometheusDatasource("https://prometheus-public.test", "prom", "prometheus:primary"); err != nil {
 		t.Fatalf("configure Prometheus datasource binding: %v", err)
 	}
 
@@ -95,6 +95,12 @@ func TestGrafanaConnectorSync(t *testing.T) {
 	}
 	if !boundMetricRelationship {
 		t.Fatal("expected explicitly bound panel metric relationship evidence")
+	}
+	for _, reference := range snapshot.References {
+		canonical := prometheusResource(reference.Type, reference.Name, "https://prometheus-public.test", reference.Source.ExternalID, reference.CreatedAt)
+		if reference.ID != model.LocalConnectorResourceID("prometheus:primary", canonical.ID) {
+			t.Fatalf("bound Grafana reference did not use the target connector namespace: %#v", reference)
+		}
 	}
 	assertMetricInstance(t, snapshot, "https://prometheus-public.test")
 	assertMetric(t, snapshot, "node_cpu_seconds_total")
@@ -295,6 +301,28 @@ func TestSanitizeGrafanaResourceURLs(t *testing.T) {
 	for _, secret := range []string{rawURL, "reader", "secret", "token", "sensitive", "/d/private/overview", "orgId"} {
 		if strings.Contains(string(encoded), secret) {
 			t.Fatalf("sanitized resources contain %q: %s", secret, encoded)
+		}
+	}
+}
+
+func TestFinalizeGrafanaResourcesKeepsExactURLMetricsAsReferences(t *testing.T) {
+	now := time.Date(2026, 8, 24, 0, 0, 0, 0, time.UTC)
+	metricURL := "https://prometheus.example"
+	datasource := grafanaResource(model.ResourceTypeDatasource, "Prometheus", "https://grafana.example", "datasource:prom", now)
+	datasource.Metadata = map[string]string{model.MetadataDatasourceURL: metricURL}
+	metric := prometheusResource(model.ResourceTypeMetric, "definitely_not_collected", metricURL, "metric:definitely_not_collected", now)
+	relationship := grafanaMetricRelationship("panel", metric.ID, true, now)
+	resources, references := finalizeGrafanaResources(map[string]model.Resource{
+		datasource.ID: datasource,
+		metric.ID:     metric,
+	}, []model.Relationship{relationship})
+
+	if len(references) != 1 || references[0].ID != metric.ID {
+		t.Fatalf("exact metric dependency must remain a reference after URL redaction: %#v", references)
+	}
+	for _, resource := range resources {
+		if resource.ID == metric.ID {
+			t.Fatalf("exact missing metric was persisted as observed inventory: %#v", resource)
 		}
 	}
 }
@@ -1558,7 +1586,7 @@ func TestGrafanaAlertRulesMapping(t *testing.T) {
 				},
 			},
 		},
-	}, map[string]model.Resource{"prom": datasource}, "http://grafana.example", now)
+	}, map[string]model.Resource{"prom": datasource}, &GrafanaConnector{}, "http://grafana.example", now)
 
 	snapshot := Snapshot{Relationships: relationships}
 	for _, resource := range resources {
@@ -1618,7 +1646,7 @@ func TestGrafanaAlertRulesUseModelDatasource(t *testing.T) {
 		t.Fatalf("decode alert rules: %v", err)
 	}
 
-	addGrafanaAlertRules(resources, &relationships, rules, map[string]model.Resource{"prom": datasource}, "http://grafana.example", now)
+	addGrafanaAlertRules(resources, &relationships, rules, map[string]model.Resource{"prom": datasource}, &GrafanaConnector{}, "http://grafana.example", now)
 	snapshot := Snapshot{Relationships: relationships}
 	for _, resource := range resources {
 		snapshot.Resources = append(snapshot.Resources, resource)
@@ -1657,7 +1685,7 @@ func TestGrafanaReceiverMapping(t *testing.T) {
 		},
 	}
 
-	addGrafanaAlertRules(resources, &relationships, rules, nil, "http://grafana.example", now)
+	addGrafanaAlertRules(resources, &relationships, rules, nil, &GrafanaConnector{}, "http://grafana.example", now)
 	addGrafanaReceivers(resources, &relationships, []grafanaContactPoint{
 		{UID: "cp-slack", Name: "platform-oncall", Type: "slack", Provenance: "api"},
 		{UID: "cp-pd", Name: "platform-oncall", Type: "pagerduty", Provenance: "file"},
@@ -1849,7 +1877,7 @@ func TestGrafanaAppPlatformAlertingFallback(t *testing.T) {
 	resources := make(map[string]model.Resource)
 	relationships := make([]model.Relationship, 0)
 	now := time.Now().UTC()
-	addGrafanaAlertRules(resources, &relationships, rules, nil, connector.baseURL, now)
+	addGrafanaAlertRules(resources, &relationships, rules, nil, connector, connector.baseURL, now)
 	addGrafanaReceivers(resources, &relationships, contactPoints, policy, rules, connector.baseURL, now)
 	addGrafanaInhibitionRules(resources, inhibitionRules, connector.baseURL, now)
 	addGrafanaTimeIntervals(resources, &relationships, timeIntervals, timeIntervalsAvailable, policy, connector.baseURL, now)

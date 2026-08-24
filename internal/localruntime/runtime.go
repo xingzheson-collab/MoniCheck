@@ -176,7 +176,7 @@ func buildConnectors(o Options) ([]connector.Connector, error) {
 		case "grafana":
 			grafanaConnector, createErr := connector.NewGrafanaConnectorWithOptions(item.url, httpOptions)
 			if createErr == nil && strings.TrimSpace(o.PrometheusURL) != "" {
-				createErr = grafanaConnector.ConfigurePrometheusDatasource(o.PrometheusURL, o.PrometheusDatasourceUID)
+				createErr = grafanaConnector.ConfigurePrometheusDatasource(o.PrometheusURL, o.PrometheusDatasourceUID, "prometheus:prometheus-shortcut")
 			}
 			c, err = grafanaConnector, createErr
 		case "alertmanager":
