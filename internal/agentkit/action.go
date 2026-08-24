@@ -31,6 +31,12 @@ type actionTemplate struct {
 }
 
 var actionTemplates = map[string]actionTemplate{
+	"monitoring-reference-failure": {
+		Title:        "Repair monitoring references that no longer resolve",
+		Consequence:  "An empty panel or an alert that cannot evaluate can create false confidence during an incident.",
+		FirstStep:    "Open the explicitly bound panel or rule, confirm the referenced metric is absent from that Prometheus inventory, then restore collection or correct the query with owner approval.",
+		Verification: "Repeat the audit against the same datasource, load the panel or evaluate the rule, and require the reference failure to clear.",
+	},
 	"target-telemetry-loss": {
 		Title:        "Restore or intentionally retire broken telemetry targets",
 		Consequence:  "Metrics from the affected target path may be unavailable, so dependent dashboards and alerts can become blind.",
@@ -213,6 +219,8 @@ func sortedKeys(values map[string]bool) []string {
 
 func actionFamily(findingType, category, resourceType string) string {
 	switch findingType {
+	case "PanelMetricNotCollected", "AlertRuleMetricNotCollected", "RecordingRuleInputNotCollected":
+		return "monitoring-reference-failure"
 	case "BrokenTarget", "JobWithoutHealthyTarget", "SlowTargetScrape", "StaleTargetScrape", "TargetScrapeTimeoutRisk":
 		return "target-telemetry-loss"
 	case "ServiceObservabilityGap", "MissingMonitoringCoverage", "KubernetesServiceWithoutMonitor":

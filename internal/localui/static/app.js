@@ -64,7 +64,7 @@ function actionGroups() {
   if (!groups.length) return '<div class="panel empty">No open action groups in this audit.</div>'
   return `<div class="action-list">${groups.map((group) => `
     <article class="action-card">
-      <div class="action-head"><span class="badge ${severityClass(group.severity)}">${escapeHTML(group.severity)}</span><span>${group.finding_count} findings</span></div>
+      <div class="action-head"><span class="badge ${severityClass(group.severity)}">${escapeHTML(group.severity)}</span><span>${group.family === 'monitoring-reference-failure' ? 'MONITORING FAILURE · ' : ''}${group.finding_count} findings</span></div>
       <h2>${escapeHTML(group.title)}</h2>
       <p>${escapeHTML(group.consequence)}</p>
       <dl><dt>First step</dt><dd>${escapeHTML(group.first_step)}</dd><dt>Verify</dt><dd>${escapeHTML(group.verification)}</dd></dl>
@@ -138,7 +138,7 @@ function render(view) {
   if (view === 'overview') content.innerHTML = metrics() + table(report.priority_findings || [], [['Severity', 'severity'], ['Finding', 'type'], ['Resource', 'resource'], ['Recommendation', 'recommendation']])
   if (view === 'agent') {
     const persisted = status.state_source === 'PERSISTED_AGENT_AUDIT'
-    content.innerHTML = `${metrics()}<div class="panel agent-state"><strong>${persisted ? 'Persisted Agent audit' : 'Current Local audit'}</strong><p>This view reads the same durable evidence used by the MCP tools. Opening it does not contact providers or rerun analyzers.</p></div><div class="section-heading"><div><p class="eyebrow">DETERMINISTIC NEXT STEPS</p><h2>Action groups</h2></div><span>${audit.action_groups?.length || 0} groups</span></div>${actionGroups()}${visibility()}`
+    content.innerHTML = `${metrics()}<div class="panel agent-state"><strong>${persisted ? 'Persisted Agent audit' : 'Current Local audit'}</strong><p>Monitoring failures appear before hygiene advice. This view reads the same durable evidence used by the MCP tools and does not contact providers or rerun analyzers.</p></div><div class="section-heading"><div><p class="eyebrow">MONITORING CONTROL</p><h2>What is broken, unguarded, or unproven?</h2></div><span>${audit.action_groups?.length || 0} groups</span></div>${actionGroups()}${visibility()}`
   }
   if (view === 'findings') content.innerHTML = table(report.priority_findings || [], [['Severity', 'severity'], ['Finding', 'type'], ['Resource', 'resource'], ['Risk', 'risk_score'], ['Recommendation', 'recommendation']])
   if (view === 'coverage') content.innerHTML = coverageView()

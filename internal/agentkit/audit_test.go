@@ -76,3 +76,18 @@ func TestActionGroupsMergeTargetOutageAndKeepCriticalOutOfHygiene(t *testing.T) 
 		t.Fatalf("critical configuration risk was not promoted: %#v", byFamily)
 	}
 }
+
+func TestActionGroupsPrioritizeBrokenMonitoringReferences(t *testing.T) {
+	bundle := evidence.Bundle{Findings: []evidence.FindingEvidence{
+		{Type: "PanelMetricNotCollected", Category: "RELIABILITY", Severity: "CRITICAL", Status: "OPEN", ResourceType: "PANEL"},
+		{Type: "AlertRuleMetricNotCollected", Category: "RELIABILITY", Severity: "CRITICAL", Status: "OPEN", ResourceType: "ALERT_RULE"},
+		{Type: "MissingOwner", Category: "CONFIGURATION", Severity: "WARNING", Status: "OPEN", ResourceType: "METRIC"},
+	}}
+	got := Build(bundle, report.LocalRegressionReport{}, time.Second)
+	if len(got.ActionGroups) != 2 || got.ActionGroups[0].Family != "monitoring-reference-failure" {
+		t.Fatalf("monitoring failures were not prioritized: %#v", got.ActionGroups)
+	}
+	if got.ActionGroups[0].FindingCount != 2 || got.ActionGroups[0].Severity != "CRITICAL" {
+		t.Fatalf("broken references were not merged as critical: %#v", got.ActionGroups[0])
+	}
+}

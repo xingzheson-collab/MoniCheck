@@ -46,7 +46,7 @@ func (a *BrokenRuleQueryAnalyzer) Execute(ctx context.Context, analysis Context)
 		if rule.Status != model.ResourceStatusActive || isDisabledAlert(rule) {
 			continue
 		}
-		findingType, evidence := ruleQueryEvidence(rule, analysis)
+		findingType, severity, evidence := ruleQueryEvidence(rule, analysis)
 		if findingType == "" {
 			continue
 		}
@@ -54,14 +54,14 @@ func (a *BrokenRuleQueryAnalyzer) Execute(ctx context.Context, analysis Context)
 		findings = append(findings, model.Finding{
 			ID:       model.StableID(a.ID(), findingType, rule.ID),
 			Type:     findingType,
-			Severity: model.SeverityWarning,
+			Severity: severity,
 			Resource: model.ResourceRef{
 				ID:   rule.ID,
 				Type: rule.Type,
 				Name: rule.Name,
 			},
 			Evidence:       evidence,
-			Recommendation: "检查规则 PromQL 是否为空、是否引用了可解析的指标，并确认规则依赖关系指向有效 Metric 资源。",
+			Recommendation: ruleQueryRecommendation(findingType),
 			Metadata: map[string]string{
 				"analyzer_id": a.ID(),
 			},
@@ -73,16 +73,16 @@ func (a *BrokenRuleQueryAnalyzer) Execute(ctx context.Context, analysis Context)
 	return findings, nil
 }
 
-func ruleQueryEvidence(rule model.Resource, analysis Context) (string, []string) {
+func ruleQueryEvidence(rule model.Resource, analysis Context) (string, model.Severity, []string) {
 	query := strings.TrimSpace(rule.Metadata[model.MetadataPromQL])
 	if query == "" {
-		return "MissingRuleQuery", []string{fmt.Sprintf("%s %q has no PromQL query metadata", ruleQueryResourceKind(rule), rule.Name)}
+		return "MissingRuleQuery", model.SeverityWarning, []string{fmt.Sprintf("%s %q has no PromQL query metadata", ruleQueryResourceKind(rule), rule.Name)}
 	}
 	if len(connector.ExtractPromQLMetricNames(query)) == 0 {
-		return "UnresolvedRuleQueryMetric", []string{fmt.Sprintf("%s %q query has no resolvable metric reference", ruleQueryResourceKind(rule), rule.Name)}
+		return "UnresolvedRuleQueryMetric", model.SeverityWarning, []string{fmt.Sprintf("%s %q query has no resolvable metric reference", ruleQueryResourceKind(rule), rule.Name)}
 	}
 	if analysis.Graph == nil {
-		return "", nil
+		return "", "", nil
 	}
 	for _, relationship := range analysis.Graph.Outgoing(rule.ID) {
 		if relationship.Type != model.RelationshipUses {
@@ -90,13 +90,30 @@ func ruleQueryEvidence(rule model.Resource, analysis Context) (string, []string)
 		}
 		target, ok := analysis.Graph.Resource(relationship.ToID)
 		if !ok {
-			return "UnresolvedRuleQueryMetric", []string{fmt.Sprintf("%s %q uses missing resource %q", ruleQueryResourceKind(rule), rule.Name, relationship.ToID)}
+			if relationship.Metadata[model.MetadataMetricInventoryBinding] == "EXACT" {
+				if rule.Type == model.ResourceTypeAlertRule {
+					return "AlertRuleMetricNotCollected", model.SeverityCritical, []string{fmt.Sprintf("alert rule %q references a metric absent from its explicitly bound Prometheus inventory", rule.Name)}
+				}
+				return "RecordingRuleInputNotCollected", model.SeverityWarning, []string{fmt.Sprintf("recording rule %q references an input metric absent from its explicitly bound Prometheus inventory", rule.Name)}
+			}
+			return "UnresolvedRuleQueryMetric", model.SeverityWarning, []string{fmt.Sprintf("%s %q uses a resource that is not visible in the current inventory", ruleQueryResourceKind(rule), rule.Name)}
 		}
 		if target.Type != model.ResourceTypeMetric {
-			return "UnresolvedRuleQueryMetric", []string{fmt.Sprintf("%s %q uses non-metric resource %q of type %s", ruleQueryResourceKind(rule), rule.Name, target.Name, target.Type)}
+			return "UnresolvedRuleQueryMetric", model.SeverityWarning, []string{fmt.Sprintf("%s %q uses non-metric resource %q of type %s", ruleQueryResourceKind(rule), rule.Name, target.Name, target.Type)}
 		}
 	}
-	return "", nil
+	return "", "", nil
+}
+
+func ruleQueryRecommendation(findingType string) string {
+	switch findingType {
+	case "AlertRuleMetricNotCollected":
+		return "Restore collection for the bound metric or correct the alert expression, then prove the rule evaluates against current data and send a controlled notification test."
+	case "RecordingRuleInputNotCollected":
+		return "Restore the bound input metric or correct the recording rule expression, then verify the output series and every dependent alert."
+	default:
+		return "Inspect the rule query and confirm that its language, datasource attribution, and metric dependencies can be evaluated."
+	}
 }
 
 func ruleQueryResourceKind(rule model.Resource) string {

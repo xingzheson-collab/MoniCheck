@@ -367,7 +367,7 @@ func (c *GrafanaConnector) Sync(ctx context.Context) (Snapshot, error) {
 				for _, metricName := range extractMetricNames(target.Expression) {
 					metricResource := prometheusResource(model.ResourceTypeMetric, metricName, targetMetricInstance, "metric:"+metricName, now)
 					addResource(resourceByID, metricResource)
-					relationships = append(relationships, grafanaRelationship(panelResource.ID, metricResource.ID, model.RelationshipUses, now))
+					relationships = append(relationships, grafanaMetricRelationship(panelResource.ID, metricResource.ID, targetMetricInstance, c.prometheusMetricInstance, now))
 				}
 			}
 		}
@@ -2047,6 +2047,14 @@ func grafanaRelationship(fromID, toID string, relationshipType model.Relationshi
 	}
 }
 
+func grafanaMetricRelationship(fromID, toID, metricInstance, boundPrometheusInstance string, now time.Time) model.Relationship {
+	relationship := grafanaRelationship(fromID, toID, model.RelationshipUses, now)
+	if boundPrometheusInstance != "" && strings.TrimRight(metricInstance, "/") == strings.TrimRight(boundPrometheusInstance, "/") {
+		relationship.Metadata = map[string]string{model.MetadataMetricInventoryBinding: "EXACT"}
+	}
+	return relationship
+}
+
 func appendGrafanaRelationship(relationships *[]model.Relationship, fromID string, toID string, relationshipType model.RelationshipType, now time.Time) {
 	relationship := grafanaRelationship(fromID, toID, relationshipType, now)
 	for _, existing := range *relationships {
@@ -2135,6 +2143,7 @@ func addGrafanaAlertRules(resources map[string]model.Resource, relationships *[]
 				continue
 			}
 			metricInstance := "grafana:" + instance
+			boundPrometheusInstance := ""
 			datasourceRef := grafanaAlertRuleDataRef(item)
 			if datasource, ok := datasourceForRef(datasourceRef, datasourceByUID); ok {
 				*relationships = append(*relationships, grafanaRelationship(ruleResource.ID, datasource.ID, model.RelationshipUses, now))
@@ -2143,6 +2152,7 @@ func addGrafanaAlertRules(resources map[string]model.Resource, relationships *[]
 				}
 				if datasourceURL := grafanaDatasourceMetricInstance(datasource); datasourceURL != "" {
 					metricInstance = datasourceURL
+					boundPrometheusInstance = datasourceURL
 				}
 			} else if !shouldTreatGrafanaRefAsPromQL(datasourceRef, datasourceByUID) {
 				continue
@@ -2150,7 +2160,7 @@ func addGrafanaAlertRules(resources map[string]model.Resource, relationships *[]
 			for _, metricName := range extractMetricNames(expression) {
 				metricResource := prometheusResource(model.ResourceTypeMetric, metricName, metricInstance, "metric:"+metricName, now)
 				addResource(resources, metricResource)
-				*relationships = append(*relationships, grafanaRelationship(ruleResource.ID, metricResource.ID, model.RelationshipUses, now))
+				*relationships = append(*relationships, grafanaMetricRelationship(ruleResource.ID, metricResource.ID, metricInstance, boundPrometheusInstance, now))
 			}
 		}
 	}

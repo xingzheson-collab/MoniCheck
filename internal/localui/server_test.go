@@ -97,7 +97,7 @@ func TestLocalUIExposesPersistedAgentAuditEntry(t *testing.T) {
 			t.Fatalf("Local UI is missing Agent audit navigation %q", required)
 		}
 	}
-	for _, required := range []string{"PERSISTED_AGENT_AUDIT", "does not contact providers or rerun analyzers", "searchParams.set('view'", "action_groups", "inventory_visibility", "coverage?.assessments", "Copy exception YAML", "UNKNOWN signals are excluded from the denominator", "missing.slice(0, 10)", "unknown.slice(0, 10)", "Live connector status is unavailable in serve-only mode"} {
+	for _, required := range []string{"PERSISTED_AGENT_AUDIT", "does not contact providers or rerun analyzers", "Monitoring failures appear before hygiene advice", "MONITORING FAILURE", "searchParams.set('view'", "action_groups", "inventory_visibility", "coverage?.assessments", "Copy exception YAML", "UNKNOWN signals are excluded from the denominator", "missing.slice(0, 10)", "unknown.slice(0, 10)", "Live connector status is unavailable in serve-only mode"} {
 		if !strings.Contains(string(script), required) {
 			t.Fatalf("Local UI is missing persisted Agent behavior %q", required)
 		}

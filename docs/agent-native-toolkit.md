@@ -73,6 +73,12 @@ The audit result excludes credentials, endpoint URLs, resource names, labels, qu
 
 Both aggregate audits and scoped finding queries also include deterministic `action_groups`. MoniCheck merges repeated findings into operational families and supplies fixed consequence, first-step, and verification templates before the Agent explains them. Aggregate groups remain anonymous; scoped groups may name only the resources covered by the need-to-know disclosure.
 
+The first operational question is monitoring control, not metadata hygiene.
+`monitoring-reference-failure` contains only exactly bound panel or rule metric
+references that are absent from the corresponding Prometheus inventory. Parser
+failure, datasource variables, and incomplete inventory remain unresolved
+evidence and cannot be described as a dead panel or ineffective alert.
+
 Every aggregate audit and Service coverage query includes
 `inventory_visibility`. Observed resources do not prove complete provider,
 folder, pagination, tenant, or organization visibility, so MoniCheck reports

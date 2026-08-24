@@ -50,12 +50,17 @@ func (a *BrokenPanelQueryAnalyzer) Execute(ctx context.Context, analysis Context
 		query := strings.TrimSpace(panel.Metadata[model.MetadataPromQL])
 		var findingType string
 		var evidence string
+		severity := model.SeverityWarning
 		if query == "" {
 			findingType = "MissingPanelQuery"
 			evidence = fmt.Sprintf("panel %q has no PromQL query metadata", panel.Name)
 		} else if len(connector.ExtractPromQLMetricNames(query)) == 0 {
 			findingType = "UnresolvedPanelQueryMetric"
 			evidence = fmt.Sprintf("panel %q query has no resolvable metric reference", panel.Name)
+		} else if missing := missingExactlyBoundMetricDependencies(panel.ID, analysis); missing > 0 {
+			findingType = "PanelMetricNotCollected"
+			severity = model.SeverityCritical
+			evidence = fmt.Sprintf("panel %q has %d metric reference(s) absent from its explicitly bound Prometheus inventory", panel.Name, missing)
 		}
 		if findingType == "" {
 			continue
@@ -64,14 +69,14 @@ func (a *BrokenPanelQueryAnalyzer) Execute(ctx context.Context, analysis Context
 		findings = append(findings, model.Finding{
 			ID:       model.StableID(a.ID(), findingType, panel.ID),
 			Type:     findingType,
-			Severity: model.SeverityWarning,
+			Severity: severity,
 			Resource: model.ResourceRef{
 				ID:   panel.ID,
 				Type: panel.Type,
 				Name: panel.Name,
 			},
 			Evidence:       []string{evidence},
-			Recommendation: "检查 Grafana Panel 的查询配置，确认 PromQL 不为空且引用了有效指标。",
+			Recommendation: panelQueryRecommendation(findingType),
 			Metadata: map[string]string{
 				"analyzer_id": a.ID(),
 			},
@@ -81,4 +86,27 @@ func (a *BrokenPanelQueryAnalyzer) Execute(ctx context.Context, analysis Context
 		})
 	}
 	return findings, nil
+}
+
+func missingExactlyBoundMetricDependencies(resourceID string, analysis Context) int {
+	if analysis.Graph == nil {
+		return 0
+	}
+	missing := 0
+	for _, relationship := range analysis.Graph.Outgoing(resourceID) {
+		if relationship.Type != model.RelationshipUses || relationship.Metadata[model.MetadataMetricInventoryBinding] != "EXACT" {
+			continue
+		}
+		if _, ok := analysis.Graph.Resource(relationship.ToID); !ok {
+			missing++
+		}
+	}
+	return missing
+}
+
+func panelQueryRecommendation(findingType string) string {
+	if findingType == "PanelMetricNotCollected" {
+		return "Restore collection for the explicitly bound metric or update the panel query after owner review, then rerun the audit and load the panel against the same datasource."
+	}
+	return "Inspect the Grafana panel query and confirm that its language, datasource attribution, and metric references can be evaluated."
 }

@@ -40,6 +40,16 @@ func TestBrokenPanelQueryAnalyzer(t *testing.T) {
 			model.MetadataPromQL: "sum(rate([5m]))",
 		},
 	}
+	deadPanel := model.Resource{
+		ID:     "panel-dead-metric",
+		Type:   model.ResourceTypePanel,
+		Name:   "Dead metric",
+		Status: model.ResourceStatusActive,
+		Source: model.SourceInfo{System: "grafana", Instance: "local", ExternalID: "panel:dead"},
+		Metadata: map[string]string{
+			model.MetadataPromQL: "rate(removed_metric_total[5m])",
+		},
+	}
 	deprecatedEmptyPanel := model.Resource{
 		ID:     "panel-deprecated-empty",
 		Type:   model.ResourceTypePanel,
@@ -55,10 +65,16 @@ func TestBrokenPanelQueryAnalyzer(t *testing.T) {
 		Source: model.SourceInfo{System: "sample", Instance: "local", ExternalID: "panel:sample"},
 	}
 
-	for _, resource := range []model.Resource{goodPanel, emptyPanel, badPanel, deprecatedEmptyPanel, sampleEmptyPanel} {
+	for _, resource := range []model.Resource{goodPanel, emptyPanel, badPanel, deadPanel, deprecatedEmptyPanel, sampleEmptyPanel} {
 		if err := store.Resources.Upsert(ctx, resource); err != nil {
 			t.Fatalf("upsert resource: %v", err)
 		}
+	}
+	if err := store.Relationships.Upsert(ctx, model.Relationship{
+		ID: "dead-panel-uses-metric", FromID: deadPanel.ID, ToID: "missing-bound-metric", Type: model.RelationshipUses,
+		Metadata: map[string]string{model.MetadataMetricInventoryBinding: "EXACT"},
+	}); err != nil {
+		t.Fatalf("upsert relationship: %v", err)
 	}
 
 	resourceGraph, err := graph.Build(ctx, store.Resources, store.Relationships)
@@ -70,9 +86,15 @@ func TestBrokenPanelQueryAnalyzer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute analyzer: %v", err)
 	}
-	if len(findings) != 2 {
-		t.Fatalf("expected 2 findings, got %d", len(findings))
+	if len(findings) != 3 {
+		t.Fatalf("expected 3 findings, got %d", len(findings))
 	}
 	assertFindingType(t, findings, "MissingPanelQuery")
 	assertFindingType(t, findings, "UnresolvedPanelQueryMetric")
+	assertFindingType(t, findings, "PanelMetricNotCollected")
+	for _, finding := range findings {
+		if finding.Type == "PanelMetricNotCollected" && finding.Severity != model.SeverityCritical {
+			t.Fatalf("expected dead bound panel metric to be critical, got %#v", finding)
+		}
+	}
 }

@@ -54,7 +54,7 @@ func (a *BrokenDashboardAnalyzer) Execute(ctx context.Context, analysis Context)
 		findings = append(findings, model.Finding{
 			ID:       model.StableID(a.ID(), dashboard.ID),
 			Type:     "BrokenDashboard",
-			Severity: model.SeverityCritical,
+			Severity: model.SeverityWarning,
 			Resource: model.ResourceRef{
 				ID:   dashboard.ID,
 				Type: dashboard.Type,

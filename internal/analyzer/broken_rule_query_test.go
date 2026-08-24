@@ -70,7 +70,7 @@ func TestBrokenRuleQueryAnalyzer(t *testing.T) {
 	}
 	for _, relationship := range []model.Relationship{
 		{ID: "valid-uses-metric", FromID: validRule.ID, ToID: metric.ID, Type: model.RelationshipUses},
-		{ID: "dangling-uses-metric", FromID: danglingRule.ID, ToID: "metric-missing", Type: model.RelationshipUses},
+		{ID: "dangling-uses-metric", FromID: danglingRule.ID, ToID: "metric-missing", Type: model.RelationshipUses, Metadata: map[string]string{model.MetadataMetricInventoryBinding: "EXACT"}},
 	} {
 		if err := store.Relationships.Upsert(ctx, relationship); err != nil {
 			t.Fatalf("upsert relationship: %v", err)
@@ -102,8 +102,13 @@ func TestBrokenRuleQueryAnalyzer(t *testing.T) {
 	if found[unresolvedQueryRule.ID] != "UnresolvedRuleQueryMetric" {
 		t.Fatalf("expected unresolved query finding, got %#v", found)
 	}
-	if found[danglingRule.ID] != "UnresolvedRuleQueryMetric" {
+	if found[danglingRule.ID] != "AlertRuleMetricNotCollected" {
 		t.Fatalf("expected dangling metric finding, got %#v", found)
+	}
+	for _, finding := range findings {
+		if finding.Resource.ID == danglingRule.ID && finding.Severity != model.SeverityCritical {
+			t.Fatalf("expected ineffective alert to be critical, got %#v", finding)
+		}
 	}
 	if found[validRule.ID] != "" || found[disabledRule.ID] != "" {
 		t.Fatalf("did not expect valid or disabled rule findings, got %#v", found)

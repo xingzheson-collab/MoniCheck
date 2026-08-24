@@ -1,10 +1,10 @@
 ---
 name: monicheck-observability-audit
-description: Run evidence-backed, read-only observability audits with MoniCheck when users ask about monitoring coverage, configuration risk, waste, regressions, or mixed Prometheus and Grafana estates.
+description: Check whether monitoring itself is broken, unguarded, or unproven with read-only MoniCheck evidence across Prometheus, Grafana, and mixed observability estates.
 license: Apache-2.0
 metadata:
   author: MoniCheck
-  version: "0.3.1"
+  version: "0.4.0"
 ---
 
 # MoniCheck Observability Audit
@@ -41,7 +41,7 @@ The aggregate audit is for triage, not entity-level answers. When the user asks 
 
 Every query requires a concise `purpose` derived from the user's active question. Keep the default limit unless the user needs more evidence; never exceed the tool limit. Do not issue an unscoped inventory dump, use query tools speculatively, or broaden a failed service match without telling the user. Query results may disclose resource identifiers within the requested scope, but still exclude credentials, endpoints, labels, raw queries, raw evidence, dashboard JSON, source configuration, and user identity. Each disclosure is recorded in the owner-only local query audit.
 
-Lead with MoniCheck's deterministic `action_groups` when they are present. Preserve their consequence, first step, and verification condition. Use the Agent to ask environment-specific questions such as whether a target was intentionally retired; do not replace a deterministic group with a newly invented root cause.
+Lead with MoniCheck's deterministic `action_groups` when they are present. Show `monitoring-reference-failure` before coverage gaps and show both before hygiene advice. Preserve each consequence, first step, and verification condition. Use the Agent to ask environment-specific questions such as whether a target was intentionally retired; do not replace a deterministic group with a newly invented root cause.
 
 ## Evidence Rules
 
@@ -50,6 +50,7 @@ Lead with MoniCheck's deterministic `action_groups` when they are present. Prese
 - Do not claim estate-wide coverage from telemetry alone. A coverage claim needs an independent inventory such as Kubernetes manifests or an explicit service list.
 - Do not recommend deletion from a single absent metric observation. Require source attribution plus corroborating usage or history evidence.
 - Preserve analyzer severity and evidence trust. The model may explain a finding, but must not silently strengthen it.
+- Call a panel or alert metric reference broken only when MoniCheck returns `PanelMetricNotCollected` or `AlertRuleMetricNotCollected`. `UnresolvedPanelQueryMetric` is parser uncertainty, not proof that Prometheus failed to collect a metric.
 - Resource names returned by a need-to-know query are scoped evidence, not permission to disclose adjacent inventory. Follow the returned disclosure block and its truncation state.
 - Read `inventory_visibility` before making a coverage claim. `NOT_PROVEN_COMPLETE` means observed inventory cannot prove estate-wide absence.
 - For shared Grafana, report the observed folder/dashboard counts and the

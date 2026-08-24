@@ -1,8 +1,12 @@
 # MoniCheck
 
-MoniCheck Public is an agent-native, local-first observability audit toolkit for self-hosted and hybrid environments. It gives the AI agent you already use a deterministic Go evidence engine, a portable Agent Skill, and read-only local MCP tools. MoniCheck connects to Prometheus, Grafana, Alertmanager, Kubernetes manifests, and other supported sources, then evaluates monitoring coverage, configuration risk, regressions, and cost signals without asking a language model to invent the facts.
+MoniCheck Public is an agent-native, local-first control check for self-hosted and hybrid monitoring. Enterprises rarely lack dashboards, alerts, and metrics; they lose confidence that those assets still work together. MoniCheck tells the AI agent you already use where monitoring is broken, where an expected guard is missing, and where the available evidence cannot prove coverage. A deterministic Go engine, portable Agent Skill, and read-only local MCP tools keep those claims separate from metadata hygiene and model guesses.
 
 This public repository is intentionally local-only. It contains no hosted website, cloud account system, organization control plane, billing, or managed execution code.
+
+Review the [Local state security boundary](docs/local-state-security.md) before
+placing state on a shared host, and the [release supply-chain statement](docs/supply-chain.md)
+before installing a binary.
 
 ## Use with an AI agent
 
@@ -28,9 +32,12 @@ For any MCP-compatible agent, configure the absolute binary path with the `mcp` 
 
 Then ask the agent to run a read-only observability audit. The Agent Skill enforces evidence rules such as `UNKNOWN` not meaning `MISSING`; an unresolved Grafana datasource variable cannot justify a panel or metric deletion recommendation. See [`docs/agent-native-toolkit.md`](docs/agent-native-toolkit.md).
 
-The `v0.7.3` release makes governance intent fail visibly. A custom expectation must match an active Service, an exception must affect an applicable service-signal assessment, and both are applied before the current scan's analyzers run. Target-job outages are grouped with their broken targets, CRITICAL findings cannot hide in a hygiene backlog, `coverage.by_service` returns all custom assessments, serve-only explains why live connector state is absent, and Grafana reports ACL completeness as unverified with an Admin comparison path.
+The `v0.7.4` release makes monitoring control the first operational question. A panel or alert can be called broken only when its datasource is
+explicitly bound to a Prometheus connector and the referenced metric is absent
+from that exact inventory. Parser uncertainty and datasource variables remain
+unproven rather than being promoted into false missing-metric claims. Exact failures appear before metadata hygiene, `BrokenDashboard` no longer claims CRITICAL from health metadata alone, and releases include a CycloneDX SBOM. The v0.7.3 fail-visible coverage intent and Grafana ACL diagnostics remain in place.
 
-> **Release status:** `v0.7.3` is an Agent-native Preview. It includes the
+> **Release status:** `v0.7.4` is an Agent-native Preview. It includes the
 > portable `monicheck-observability-audit` Skill, a local stdio MCP server, and
 > bounded `agent-audit.v1` output while keeping collection and analysis inside
 > the deterministic Local engine. It also retains the `v0.6.6` shared-Grafana
@@ -50,7 +57,7 @@ Prebuilt releases cover both common CPU families. In Go release names,
 | macOS | `arm64` (Apple silicon) | `darwin_arm64.tar.gz` |
 
 Download the matching archive and `SHA256SUMS` from the
-[v0.7.3 Preview Release](https://github.com/xingzheson-collab/MoniCheck/releases/tag/v0.7.3).
+[v0.7.4 Preview Release](https://github.com/xingzheson-collab/MoniCheck/releases/tag/v0.7.4).
 Verify the checksum before running the binary.
 
 ## Quick start

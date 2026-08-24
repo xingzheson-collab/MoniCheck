@@ -9,20 +9,23 @@ import (
 )
 
 var englishFindingRecommendations = map[string]string{
-	"AlertWithoutGeneratorURL":      "Configure a valid external or generator URL for the alert producer so responders can open the originating query or rule context, then verify a newly emitted alert contains the link.",
-	"BrokenTarget":                  "Check exporter health, network reachability, and the effective Prometheus scrape configuration; rerun discovery after the target recovers.",
-	"HighCardinalityMetric":         "Review label value growth and downstream consumers. Remove unbounded labels or narrow collection only after dependency validation.",
-	"MissingMetricUnit":             "Declare the metric unit in metadata or use an unambiguous unit suffix so queries, dashboards, and alerts preserve the intended meaning.",
-	"MissingMonitoringCoverage":     "Add the missing signal coverage or register a scoped, time-bound exception with an accountable owner.",
-	"MissingAlertDuration":          "Set a non-zero alert hold duration appropriate to the symptom and evaluation interval, then test that transient noise does not page responders.",
-	"MissingOwner":                  "Add a stable owner or team label so findings, lifecycle decisions, and remediation can be routed to an accountable group.",
-	"MissingRuleQuery":              "Add or repair the alert or recording rule query, validate it against current data, and confirm the rule evaluates successfully before enabling notifications.",
-	"MissingRunbook":                "Add a valid runbook URL with diagnosis, impact, mitigation, and escalation steps, then verify responders can open it from the emitted alert.",
-	"NoAnnotation":                  "Add concise summary and description annotations that explain the symptom, impact, and first diagnostic step, then inspect a rendered alert notification.",
-	"OrphanAlert":                   "Restore the rule's metric dependency or remove the obsolete alert after confirming no dashboard, SLO, notification, or response workflow still relies on it.",
-	"UnallocatedMetricCost":         "Add one stable team or owner attribution value so measured active series can be assigned to an accountable cost boundary.",
-	"AmbiguousMetricCostAllocation": "Resolve conflicting ownership labels or metadata and retain one stable attribution value before using the series in cost reporting.",
-	"UnusedMetric":                  "Confirm the metric has no dashboard, alert, recording-rule, or external consumer before disabling collection or marking it deprecated.",
+	"AlertRuleMetricNotCollected":    "Restore collection for the bound metric or correct the alert expression, then prove the rule evaluates against current data and send a controlled notification test.",
+	"AlertWithoutGeneratorURL":       "Configure a valid external or generator URL for the alert producer so responders can open the originating query or rule context, then verify a newly emitted alert contains the link.",
+	"BrokenTarget":                   "Check exporter health, network reachability, and the effective Prometheus scrape configuration; rerun discovery after the target recovers.",
+	"HighCardinalityMetric":          "Review label value growth and downstream consumers. Remove unbounded labels or narrow collection only after dependency validation.",
+	"MissingMetricUnit":              "Declare the metric unit in metadata or use an unambiguous unit suffix so queries, dashboards, and alerts preserve the intended meaning.",
+	"MissingMonitoringCoverage":      "Add the missing signal coverage or register a scoped, time-bound exception with an accountable owner.",
+	"PanelMetricNotCollected":        "Restore collection for the explicitly bound metric or update the panel query after owner review, then rerun the audit and load the panel against the same datasource.",
+	"RecordingRuleInputNotCollected": "Restore the bound input metric or correct the recording rule expression, then verify the output series and every dependent alert.",
+	"MissingAlertDuration":           "Set a non-zero alert hold duration appropriate to the symptom and evaluation interval, then test that transient noise does not page responders.",
+	"MissingOwner":                   "Add a stable owner or team label so findings, lifecycle decisions, and remediation can be routed to an accountable group.",
+	"MissingRuleQuery":               "Add or repair the alert or recording rule query, validate it against current data, and confirm the rule evaluates successfully before enabling notifications.",
+	"MissingRunbook":                 "Add a valid runbook URL with diagnosis, impact, mitigation, and escalation steps, then verify responders can open it from the emitted alert.",
+	"NoAnnotation":                   "Add concise summary and description annotations that explain the symptom, impact, and first diagnostic step, then inspect a rendered alert notification.",
+	"OrphanAlert":                    "Restore the rule's metric dependency or remove the obsolete alert after confirming no dashboard, SLO, notification, or response workflow still relies on it.",
+	"UnallocatedMetricCost":          "Add one stable team or owner attribution value so measured active series can be assigned to an accountable cost boundary.",
+	"AmbiguousMetricCostAllocation":  "Resolve conflicting ownership labels or metadata and retain one stable attribution value before using the series in cost reporting.",
+	"UnusedMetric":                   "Confirm the metric has no dashboard, alert, recording-rule, or external consumer before disabling collection or marking it deprecated.",
 }
 
 // PresentationRecommendation localizes only built-in product findings. User

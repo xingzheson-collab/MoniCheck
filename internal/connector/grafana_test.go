@@ -87,6 +87,15 @@ func TestGrafanaConnectorSync(t *testing.T) {
 	assertRelationship(t, snapshot, model.RelationshipUses, model.ResourceTypePanel, model.ResourceTypeMetric)
 	assertRelationship(t, snapshot, model.RelationshipUses, model.ResourceTypeDashboard, model.ResourceTypeDatasource)
 	assertRelationship(t, snapshot, model.RelationshipUses, model.ResourceTypeDashboard, model.ResourceTypeMetric)
+	boundMetricRelationship := false
+	for _, relationship := range snapshot.Relationships {
+		if relationship.Metadata[model.MetadataMetricInventoryBinding] == "EXACT" {
+			boundMetricRelationship = true
+		}
+	}
+	if !boundMetricRelationship {
+		t.Fatal("expected explicitly bound panel metric relationship evidence")
+	}
 	assertMetricInstance(t, snapshot, "https://prometheus-public.test")
 	assertMetric(t, snapshot, "node_cpu_seconds_total")
 	assertDashboardMetadata(t, snapshot, "api", "service-folder", "Service Dashboards", "api-overview")
