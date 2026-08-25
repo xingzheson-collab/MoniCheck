@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -71,6 +72,9 @@ func New(ctx context.Context, o Options) (*Runtime, error) {
 	connectors, err := buildConnectors(o)
 	if err != nil {
 		return nil, err
+	}
+	if len(connectors) == 0 {
+		return nil, errors.New("configure at least one live local source; use monicheck ui for persisted audit state")
 	}
 	engine := execution.NewEngine(store, connectors, newRegistry(), logger.New(os.Stderr, o.LogLevel))
 	if err := engine.Sync(ctx); err != nil {
@@ -148,6 +152,28 @@ func (r *Runtime) LatestReport(ctx context.Context) (model.ReportExport, error) 
 		return latest, errors.New("local report unavailable")
 	}
 	return latest, nil
+}
+
+func ExportLatestReport(ctx context.Context, storagePath, outputPath string) (model.ReportExport, error) {
+	outputPath = strings.TrimSpace(outputPath)
+	if outputPath == "" {
+		return model.ReportExport{}, errors.New("--out is required")
+	}
+	runtime, err := OpenExisting(ctx, storagePath)
+	if err != nil {
+		return model.ReportExport{}, err
+	}
+	export, err := runtime.LatestReport(ctx)
+	if err != nil {
+		return model.ReportExport{}, err
+	}
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o700); err != nil {
+		return model.ReportExport{}, fmt.Errorf("create report directory: %w", err)
+	}
+	if err := os.WriteFile(outputPath, []byte(export.Content), 0o600); err != nil {
+		return model.ReportExport{}, fmt.Errorf("write report: %w", err)
+	}
+	return export, nil
 }
 
 func buildConnectors(o Options) ([]connector.Connector, error) {

@@ -34,6 +34,7 @@ header button{border:1px solid #b8c6c1;background:white;padding:8px 14px;border-
 .table-panel{padding:6px 14px}
 .empty{color:#63756e;text-align:center;padding:32px}
 .agent-state{border-left:3px solid #16845a}
+.agent-state.replay{border-left-color:#d4a72c}.agent-state>div{display:flex;align-items:center;gap:10px}
 .section-heading{display:flex;align-items:end;justify-content:space-between;margin:28px 0 12px}
 .section-heading .eyebrow{margin-bottom:4px}
 .section-heading>span{color:#63756e;font-size:13px}
@@ -54,6 +55,7 @@ header button{border:1px solid #b8c6c1;background:white;padding:8px 14px;border-
 .visibility-counts strong,.coverage-totals strong{font-size:22px;text-align:right}.visibility-counts span,.coverage-totals span{font-size:12px;color:#63756e}
 .visibility .muted{grid-column:1/-1}
 .muted{color:#63756e;font-size:12px;line-height:1.5}
+.workflow-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.workflow-grid .panel{min-width:0}.question-panel{display:grid;grid-template-columns:minmax(220px,.7fr) minmax(0,1.3fr);gap:24px;align-items:start}.question-list{display:grid;gap:8px}.question{border:1px solid #dce3e0;background:#f8faf9;border-radius:5px;padding:9px 11px;font-weight:500}
 .signal-strip{display:flex;gap:8px;overflow:auto;margin-top:12px}.signal-strip span{white-space:nowrap;background:#e9efec;border-radius:5px;padding:7px 9px;font-size:12px;color:#526a61}
 code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;white-space:normal;overflow-wrap:anywhere}
 table{width:100%;min-width:760px;border-collapse:collapse;font-size:13px}
@@ -73,5 +75,6 @@ th{color:#63756e;font-weight:600}
   .metrics{grid-template-columns:repeat(2,1fr)}
   .action-list{grid-template-columns:1fr}
   .visibility,.coverage-summary{grid-template-columns:1fr}
+  .workflow-grid,.question-panel{grid-template-columns:1fr}
   header{align-items:end}
 }

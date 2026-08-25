@@ -14,6 +14,7 @@ import (
 	"monicheck/internal/agentkit"
 	"monicheck/internal/buildinfo"
 	"monicheck/internal/localruntime"
+	"monicheck/internal/model"
 )
 
 const latestProtocolVersion = "2025-11-25"
@@ -108,6 +109,11 @@ type baselineDiffToolInput struct {
 	Purpose     string `json:"purpose"`
 }
 
+type reportExportToolInput struct {
+	StoragePath string `json:"storage_path"`
+	OutputPath  string `json:"output_path"`
+}
+
 func (s Server) Run(ctx context.Context) error {
 	if s.Input == nil || s.Output == nil {
 		return errors.New("MCP stdio input and output are required")
@@ -196,6 +202,7 @@ func tools() []toolDefinition {
 	localReadOnly := map[string]any{"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false}
 	auditReadOnly := map[string]any{"readOnlyHint": true, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true}
 	queryReadOnly := map[string]any{"readOnlyHint": true, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false}
+	localWrite := map[string]any{"readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false}
 	return []toolDefinition{
 		{
 			Name: "monicheck.connectors.list", Title: "List MoniCheck connectors",
@@ -213,7 +220,7 @@ func tools() []toolDefinition {
 		},
 		{
 			Name: "monicheck.audit.run", Title: "Run a local observability audit",
-			Description: "Run deterministic Local connectors and analyzers, persist the local baseline, and return a bounded privacy-safe agent-audit.v1 summary. Credentials come only from process environment variables.",
+			Description: "Run deterministic Local connectors and analyzers, persist the local baseline, and return a bounded privacy-safe agent-audit.v1 summary. At least one YAML or environment-configured live source is required; persisted state is never silently replayed. Credentials come only from process environment variables.",
 			InputSchema: map[string]any{
 				"type": "object", "additionalProperties": false,
 				"properties": map[string]any{
@@ -221,6 +228,18 @@ func tools() []toolDefinition {
 					"storage_path": map[string]any{"type": "string", "description": "Optional durable local state path used for baseline comparison."},
 				},
 			}, Annotations: auditReadOnly,
+		},
+		{
+			Name: "monicheck.report.export", Title: "Export the latest owner-only governance report",
+			Description: "Write the latest completed governance report from durable Local state to a user-selected private file. The report content is not returned through MCP.",
+			InputSchema: map[string]any{
+				"type": "object", "additionalProperties": false,
+				"properties": map[string]any{
+					"storage_path": map[string]any{"type": "string", "description": "Optional durable Local state path produced by a completed audit."},
+					"output_path":  map[string]any{"type": "string", "description": "Required local destination for the owner-only governance JSON."},
+				},
+				"required": []string{"output_path"},
+			}, Annotations: localWrite,
 		},
 		{
 			Name: "monicheck.findings.query", Title: "Query scoped MoniCheck findings",
@@ -327,6 +346,22 @@ func (s Server) callTool(ctx context.Context, params callToolParams) toolResult 
 			AlertmanagerURL:         os.Getenv("MONICHECK_ALERTMANAGER_URL"),
 			KubernetesManifest:      os.Getenv("MONICHECK_KUBERNETES_MANIFEST_PATH"),
 		})
+	case "monicheck.report.export":
+		var input reportExportToolInput
+		if decodeErr := decodeArguments(params.Arguments, &input); decodeErr != nil {
+			err = decodeErr
+			break
+		}
+		storagePath := queryStoragePath(input.StoragePath)
+		var exported model.ReportExport
+		exported, err = localruntime.ExportLatestReport(ctx, storagePath, input.OutputPath)
+		if err == nil {
+			value = map[string]any{
+				"contract_version": "agent-report-export.v1", "written": true,
+				"output_path": input.OutputPath, "created_at": exported.CreatedAt,
+				"content_returned": false,
+			}
+		}
 	case "monicheck.findings.query":
 		var input findingsQueryToolInput
 		if decodeErr := decodeArguments(params.Arguments, &input); decodeErr != nil {

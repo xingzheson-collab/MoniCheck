@@ -299,7 +299,7 @@ func (c *GrafanaConnector) Sync(ctx context.Context) (Snapshot, error) {
 			for _, metricName := range extractGrafanaVariableMetricNames(expression) {
 				metricResource, exact := c.grafanaMetricResource(metricName, metricInstance, now)
 				addResource(resourceByID, metricResource)
-				relationships = append(relationships, grafanaMetricRelationship(dashboardResource.ID, metricResource.ID, exact, now))
+				relationships = append(relationships, grafanaMetricRelationship(dashboardResource.ID, metricResource.ID, metricName, exact, now))
 			}
 		}
 
@@ -372,7 +372,7 @@ func (c *GrafanaConnector) Sync(ctx context.Context) (Snapshot, error) {
 				for _, metricName := range extractMetricNames(target.Expression) {
 					metricResource, exact := c.grafanaMetricResource(metricName, targetMetricInstance, now)
 					addResource(resourceByID, metricResource)
-					relationships = append(relationships, grafanaMetricRelationship(panelResource.ID, metricResource.ID, exact, now))
+					relationships = append(relationships, grafanaMetricRelationship(panelResource.ID, metricResource.ID, metricName, exact, now))
 				}
 			}
 		}
@@ -2060,10 +2060,13 @@ func grafanaRelationship(fromID, toID string, relationshipType model.Relationshi
 	}
 }
 
-func grafanaMetricRelationship(fromID, toID string, exact bool, now time.Time) model.Relationship {
+func grafanaMetricRelationship(fromID, toID, metricName string, exact bool, now time.Time) model.Relationship {
 	relationship := grafanaRelationship(fromID, toID, model.RelationshipUses, now)
 	if exact {
-		relationship.Metadata = map[string]string{model.MetadataMetricInventoryBinding: "EXACT"}
+		relationship.Metadata = map[string]string{
+			model.MetadataMetricInventoryBinding: "EXACT",
+			model.MetadataMetricReferenceName:    strings.TrimSpace(metricName),
+		}
 	}
 	return relationship
 }
@@ -2184,7 +2187,7 @@ func addGrafanaAlertRules(resources map[string]model.Resource, relationships *[]
 			for _, metricName := range extractMetricNames(expression) {
 				metricResource, exact := connector.grafanaMetricResource(metricName, metricInstance, now)
 				addResource(resources, metricResource)
-				*relationships = append(*relationships, grafanaMetricRelationship(ruleResource.ID, metricResource.ID, exact && boundPrometheusInstance != "", now))
+				*relationships = append(*relationships, grafanaMetricRelationship(ruleResource.ID, metricResource.ID, metricName, exact && boundPrometheusInstance != "", now))
 			}
 		}
 	}

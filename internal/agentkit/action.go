@@ -31,6 +31,12 @@ type actionTemplate struct {
 }
 
 var actionTemplates = map[string]actionTemplate{
+	"sli-integrity-failure": {
+		Title:        "Restore the derived SLI evidence chain",
+		Consequence:  "A P95/P99 panel or alert can exist while its histogram input, recording rule, or metric contract is broken, creating false confidence.",
+		FirstStep:    "Trace the reported histogram_quantile input through its recording rule and bound Prometheus inventory; restore collection or reconcile the metric TYPE without guessing from names.",
+		Verification: "Evaluate the same P95/P99 expression against the intended datasource, repeat the audit, and require every chain hop to be OBSERVED rather than UNKNOWN.",
+	},
 	"monitoring-reference-failure": {
 		Title:        "Repair monitoring references that no longer resolve",
 		Consequence:  "An empty panel or an alert that cannot evaluate can create false confidence during an incident.",
@@ -219,6 +225,8 @@ func sortedKeys(values map[string]bool) []string {
 
 func actionFamily(findingType, category, resourceType string) string {
 	switch findingType {
+	case "DerivedSLIInputNotCollected", "DerivedSLIMetricContractDrift", "DerivedSLIInputUnverified", "DerivedSLIWithoutMetricInput":
+		return "sli-integrity-failure"
 	case "PanelMetricNotCollected", "AlertRuleMetricNotCollected", "RecordingRuleInputNotCollected":
 		return "monitoring-reference-failure"
 	case "BrokenTarget", "JobWithoutHealthyTarget", "SlowTargetScrape", "StaleTargetScrape", "TargetScrapeTimeoutRisk":

@@ -68,6 +68,7 @@ const (
 	MetadataMetricHelp                                    = "metric_help"
 	MetadataMetricUnit                                    = "metric_unit"
 	MetadataMetricInventoryBinding                        = "metric_inventory_binding"
+	MetadataMetricReferenceName                           = "metric_reference_name"
 	MetadataMetricTypeVariants                            = "metric_type_variants"
 	MetadataMetricHelpVariants                            = "metric_help_variants"
 	MetadataMetricUnitVariants                            = "metric_unit_variants"

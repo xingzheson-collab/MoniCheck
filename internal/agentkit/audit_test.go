@@ -1,14 +1,25 @@
 package agentkit
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"monicheck/internal/localruntime"
 	"monicheck/internal/report"
 	"monicheck/pkg/evidence"
 )
+
+func TestRunRejectsMissingLiveSourceBeforeOpeningPersistedState(t *testing.T) {
+	_, err := Run(context.Background(), localruntime.Options{
+		Listen: "127.0.0.1:0", StoragePath: t.TempDir() + "/state.json", LogLevel: "quiet",
+	})
+	if err == nil || !strings.Contains(err.Error(), "configure at least one local source") {
+		t.Fatalf("expected a fail-closed missing-source error, got %v", err)
+	}
+}
 
 func TestBuildProducesBoundedPrivacySafeAgentSummary(t *testing.T) {
 	now := time.Now().UTC()
@@ -48,6 +59,9 @@ func TestBuildProducesBoundedPrivacySafeAgentSummary(t *testing.T) {
 	}
 	if got.InventoryVisibility.State != "NOT_PROVEN_COMPLETE" || len(got.InventoryVisibility.UnverifiedDimensions) == 0 {
 		t.Fatalf("inventory visibility was silently asserted: %#v", got.InventoryVisibility)
+	}
+	if got.OperatorWorkflow.UICommandTemplate == "" || got.OperatorWorkflow.ReportCommandTemplate == "" || len(got.OperatorWorkflow.ExampleQuestions) != 5 {
+		t.Fatalf("operator handoff is incomplete: %#v", got.OperatorWorkflow)
 	}
 }
 

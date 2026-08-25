@@ -1,12 +1,78 @@
 package connector
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 
 	promLabels "github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 )
+
+type DerivedSLIExpression struct {
+	Function        string
+	InputMetrics    []string
+	Quantiles       []float64
+	DynamicQuantile bool
+}
+
+// ExtractPromQLDerivedSLI recognizes only PromQL constructs that the official
+// parser can prove. It does not infer SLI intent from metric names.
+func ExtractPromQLDerivedSLI(expression string) (DerivedSLIExpression, bool, error) {
+	expr, err := parser.ParseExpr(expression)
+	if err != nil {
+		return DerivedSLIExpression{}, false, err
+	}
+	result := DerivedSLIExpression{Function: "histogram_quantile"}
+	found := false
+	inputs := map[string]bool{}
+	quantiles := map[float64]bool{}
+	parser.Inspect(expr, func(node parser.Node, path []parser.Node) error {
+		call, ok := node.(*parser.Call)
+		if !ok || call.Func == nil || call.Func.Name != result.Function {
+			return nil
+		}
+		found = true
+		if len(call.Args) > 0 {
+			if literal, ok := call.Args[0].(*parser.NumberLiteral); ok {
+				quantiles[literal.Val] = true
+			} else {
+				result.DynamicQuantile = true
+			}
+		}
+		if len(call.Args) < 2 {
+			return nil
+		}
+		parser.Inspect(call.Args[1], func(input parser.Node, inputPath []parser.Node) error {
+			selector, ok := input.(*parser.VectorSelector)
+			if !ok {
+				return nil
+			}
+			if selector.Name != "" {
+				inputs[selector.Name] = true
+			}
+			for _, matcher := range selector.LabelMatchers {
+				if matcher.Name == "__name__" && matcher.Type == promLabels.MatchEqual && isPromQLMetricName(matcher.Value) {
+					inputs[matcher.Value] = true
+				}
+			}
+			return nil
+		})
+		return nil
+	})
+	if !found {
+		return DerivedSLIExpression{}, false, nil
+	}
+	for input := range inputs {
+		result.InputMetrics = append(result.InputMetrics, input)
+	}
+	for quantile := range quantiles {
+		result.Quantiles = append(result.Quantiles, quantile)
+	}
+	sort.Strings(result.InputMetrics)
+	sort.Float64s(result.Quantiles)
+	return result, true, nil
+}
 
 var promQLReservedWords = map[string]bool{
 	"and": true, "bool": true, "by": true, "ignoring": true, "group_left": true,

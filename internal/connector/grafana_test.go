@@ -311,7 +311,7 @@ func TestFinalizeGrafanaResourcesKeepsExactURLMetricsAsReferences(t *testing.T) 
 	datasource := grafanaResource(model.ResourceTypeDatasource, "Prometheus", "https://grafana.example", "datasource:prom", now)
 	datasource.Metadata = map[string]string{model.MetadataDatasourceURL: metricURL}
 	metric := prometheusResource(model.ResourceTypeMetric, "definitely_not_collected", metricURL, "metric:definitely_not_collected", now)
-	relationship := grafanaMetricRelationship("panel", metric.ID, true, now)
+	relationship := grafanaMetricRelationship("panel", metric.ID, metric.Name, true, now)
 	resources, references := finalizeGrafanaResources(map[string]model.Resource{
 		datasource.ID: datasource,
 		metric.ID:     metric,

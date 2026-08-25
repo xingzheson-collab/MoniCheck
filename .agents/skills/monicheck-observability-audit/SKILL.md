@@ -4,7 +4,7 @@ description: Check whether monitoring itself is broken, unguarded, or unproven w
 license: Apache-2.0
 metadata:
   author: MoniCheck
-  version: "0.4.0"
+  version: "0.5.0"
 ---
 
 # MoniCheck Observability Audit
@@ -24,6 +24,10 @@ Use MoniCheck as the deterministic evidence engine. Use the host agent for scope
      the intended datasource. The filter retains variable and unresolved
      dashboards as `UNKNOWN`.
    - `monicheck.audit.run` for a bounded `agent-audit.v1` result.
+     The tool requires at least one configured live source. If it fails for
+     missing configuration, stop and help the user configure a source; never
+     present persisted state as a fresh scan. Read `state_source` and
+     `evidence_collected_at` before describing recency.
      If the audit reports that a coverage expectation or exception matched
      zero active assessments, show the exact config index and correction path;
      do not treat the no-op policy as a successful audit.
@@ -38,6 +42,7 @@ The aggregate audit is for triage, not entity-level answers. When the user asks 
 - `monicheck.coverage.by_service` for one Service's metric, dashboard, and alert signal matrix.
 - `monicheck.entity.get` only after another query returns the exact entity ID and graph context is necessary.
 - `monicheck.baseline.diff` when the user asks what changed since the previous scan.
+- `monicheck.report.export` when the owner asks for the complete governance report. The tool writes a private local file and never returns the report body through MCP.
 
 Every query requires a concise `purpose` derived from the user's active question. Keep the default limit unless the user needs more evidence; never exceed the tool limit. Do not issue an unscoped inventory dump, use query tools speculatively, or broaden a failed service match without telling the user. Query results may disclose resource identifiers within the requested scope, but still exclude credentials, endpoints, labels, raw queries, raw evidence, dashboard JSON, source configuration, and user identity. Each disclosure is recorded in the owner-only local query audit.
 
@@ -51,6 +56,7 @@ Lead with MoniCheck's deterministic `action_groups` when they are present. Show 
 - Do not recommend deletion from a single absent metric observation. Require source attribution plus corroborating usage or history evidence.
 - Preserve analyzer severity and evidence trust. The model may explain a finding, but must not silently strengthen it.
 - Call a panel or alert metric reference broken only when MoniCheck returns `PanelMetricNotCollected` or `AlertRuleMetricNotCollected`. `UnresolvedPanelQueryMetric` is parser uncertainty, not proof that Prometheus failed to collect a metric.
+- Treat `DerivedSLIInputNotCollected` and `DerivedSLIMetricContractDrift` as deterministic P95/P99 chain failures. `DerivedSLIInputUnverified` remains UNKNOWN evidence; never infer a histogram dependency from a metric name alone.
 - Resource names returned by a need-to-know query are scoped evidence, not permission to disclose adjacent inventory. Follow the returned disclosure block and its truncation state.
 - Read `inventory_visibility` before making a coverage claim. `NOT_PROVEN_COMPLETE` means observed inventory cannot prove estate-wide absence.
 - For shared Grafana, report the observed folder/dashboard counts and the
@@ -62,4 +68,4 @@ Read [references/evidence-model.md](references/evidence-model.md) when interpret
 
 ## Report Outcome
 
-Produce a concise report containing scope, evidence trust, regressions, high-confidence finding groups, unknowns, and prioritized next actions. State when the evidence is insufficient. Ask for additional evidence only when it can materially change a decision. After a completed audit, offer `monicheck ui --storage-path <same-state-path>` when the user wants a visual review; opening it must not rerun collection.
+Produce a concise report containing scope, `LIVE` or `REPLAY` provenance, evidence time, evidence trust, regressions, high-confidence finding groups, unknowns, and prioritized next actions. Separate work into human decisions, approved configuration repair, and live rescan verification. State when the evidence is insufficient. Ask for additional evidence only when it can materially change a decision. After a completed audit, offer `monicheck ui --storage-path <same-state-path>` for visual review and `monicheck report export --storage-path <same-state-path> --out ./monicheck-governance-report.json` for the owner-only report; neither command reruns collection.

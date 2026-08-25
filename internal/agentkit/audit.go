@@ -38,6 +38,14 @@ func BuildExisting(ctx context.Context, runtime *localruntime.Runtime) (Audit, e
 		return Audit{}, err
 	}
 	audit := Build(bundle, regression, 0)
+	audit.StateSource = "REPLAY"
+	if runtime.StateSource == "LIVE_LOCAL_RUNTIME" {
+		audit.StateSource = "LIVE"
+	}
+	audit.EvidenceCollectedAt = runtime.Execution.FinishedAt
+	if audit.EvidenceCollectedAt.IsZero() {
+		audit.EvidenceCollectedAt = bundle.GeneratedAt
+	}
 	resources, err := runtime.Store.Resources.List(ctx, storage.ResourceFilter{})
 	if err != nil {
 		return Audit{}, err
@@ -95,11 +103,22 @@ type InventoryVisibility struct {
 	AccessGuidance            string   `json:"access_guidance,omitempty"`
 }
 
+type OperatorWorkflow struct {
+	UICommandTemplate     string   `json:"ui_command_template"`
+	ReportCommandTemplate string   `json:"report_command_template"`
+	ExampleQuestions      []string `json:"example_questions"`
+	HumanDecision         string   `json:"human_decision"`
+	ConfigurationRepair   string   `json:"configuration_repair"`
+	RescanVerification    string   `json:"rescan_verification"`
+}
+
 const grafanaAccessGuidance = "Grafana folder ACLs can truncate inventory without an API error. For completeness validation, repeat the audit with an Admin service account and compare observed folder and dashboard counts. Keep the result NOT_PROVEN_COMPLETE until that comparison is reviewed."
 
 type Audit struct {
 	ContractVersion      string                       `json:"contract_version"`
 	GeneratedAt          time.Time                    `json:"generated_at"`
+	EvidenceCollectedAt  time.Time                    `json:"evidence_collected_at"`
+	StateSource          string                       `json:"state_source"`
 	ScanElapsedMillis    int64                        `json:"scan_elapsed_milliseconds"`
 	TargetSeconds        int64                        `json:"target_seconds"`
 	WithinTarget         bool                         `json:"within_target"`
@@ -113,6 +132,7 @@ type Audit struct {
 	OmittedFindingGroups int                          `json:"omitted_finding_groups"`
 	ActionGroups         []ActionGroup                `json:"action_groups"`
 	InventoryVisibility  InventoryVisibility          `json:"inventory_visibility"`
+	OperatorWorkflow     OperatorWorkflow             `json:"operator_workflow"`
 	Privacy              Privacy                      `json:"privacy"`
 }
 
@@ -120,6 +140,9 @@ func Run(ctx context.Context, options localruntime.Options) (Audit, error) {
 	started := time.Now().UTC()
 	if options.ActivationStartedAt.IsZero() {
 		options.ActivationStartedAt = started
+	}
+	if err := localruntime.ValidateOptions(options); err != nil {
+		return Audit{}, err
 	}
 	runtime, err := localruntime.New(ctx, options)
 	if err != nil {
@@ -133,7 +156,13 @@ func Run(ctx context.Context, options localruntime.Options) (Audit, error) {
 	if err != nil {
 		return Audit{}, err
 	}
-	return Build(bundle, regression, time.Since(started)), nil
+	audit := Build(bundle, regression, time.Since(started))
+	audit.StateSource = "LIVE"
+	audit.EvidenceCollectedAt = runtime.Execution.FinishedAt
+	if audit.EvidenceCollectedAt.IsZero() {
+		audit.EvidenceCollectedAt = bundle.GeneratedAt
+	}
+	return audit, nil
 }
 
 func Build(bundle evidence.Bundle, regression report.LocalRegressionReport, elapsed time.Duration) Audit {
@@ -166,6 +195,20 @@ func Build(bundle evidence.Bundle, regression report.LocalRegressionReport, elap
 		OmittedFindingGroups: groupCount - len(groups),
 		ActionGroups:         actionGroups,
 		InventoryVisibility:  inventoryVisibility(bundle.Connectors, bundle.Summary.ResourceCount),
+		OperatorWorkflow: OperatorWorkflow{
+			UICommandTemplate:     "monicheck ui --storage-path <same-storage-path>",
+			ReportCommandTemplate: "monicheck report export --storage-path <same-storage-path> --out ./monicheck-governance-report.json",
+			ExampleQuestions: []string{
+				"Which critical monitoring references are broken?",
+				"Is Redis monitoring healthy?",
+				"Which services are MISSING coverage and which remain UNKNOWN?",
+				"Which P95/P99 derived SLI chains are broken or unverified?",
+				"What changed since the previous live audit?",
+			},
+			HumanDecision:       "Confirm whether affected resources are intentionally retired, exempt, or still required; MoniCheck does not make that ownership decision.",
+			ConfigurationRepair: "Apply approved fixes in the owning Prometheus, Grafana, Alertmanager, or workload configuration; MoniCheck Public remains read-only.",
+			RescanVerification:  "Run a new LIVE audit against the same intended sources and require the finding to clear without a new coverage regression.",
+		},
 		Privacy: Privacy{
 			Classification: "PRIVACY_SAFE_AGENT_SUMMARY",
 			Includes:       []string{"aggregate counts", "connector health", "coverage trust", "cost estimates", "finding classifications", "deterministic action templates", "regression movement"},

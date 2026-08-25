@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"monicheck/internal/model"
+	"monicheck/internal/report"
 	"monicheck/internal/storage"
 )
 
@@ -29,7 +32,7 @@ func TestServerNegotiatesAndListsReadOnlyTools(t *testing.T) {
 	if !strings.Contains(lines[0], `"protocolVersion":"2025-06-18"`) {
 		t.Fatalf("unexpected MCP responses: %s", output.String())
 	}
-	for _, tool := range []string{"monicheck.audit.run", "monicheck.findings.query", "monicheck.coverage.by_service", "monicheck.entity.get", "monicheck.baseline.diff"} {
+	for _, tool := range []string{"monicheck.audit.run", "monicheck.report.export", "monicheck.findings.query", "monicheck.coverage.by_service", "monicheck.entity.get", "monicheck.baseline.diff"} {
 		if !strings.Contains(lines[1], tool) {
 			t.Fatalf("MCP tool list missing %q: %s", tool, lines[1])
 		}
@@ -94,6 +97,47 @@ func TestFindingsQueryToolReturnsScopedIdentifiersAndAuditRef(t *testing.T) {
 		if strings.Contains(output.String(), forbidden) {
 			t.Fatalf("query response leaked %q: %s", forbidden, output.String())
 		}
+	}
+}
+
+func TestReportExportToolWritesPrivateFileWithoutReturningContent(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.json")
+	outputPath := filepath.Join(dir, "exports", "report.json")
+	store, err := storage.NewFileStore(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	content := `{"contract_version":"governance-report.v1","private_marker":"must-not-return"}`
+	if err := store.ReportExports.Save(ctx, model.ReportExport{
+		ID: "report", Type: "governance", Format: "json", Origin: report.LocalPostureSnapshotOrigin,
+		ContentType: "application/json", Content: content, CreatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Executions.Save(ctx, model.ExecutionResult{ID: "run", Status: model.ExecutionStatusSucceeded, FinishedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	request := `{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"monicheck.report.export","arguments":{"storage_path":` + mustJSON(statePath) + `,"output_path":` + mustJSON(outputPath) + `}}}` + "\n"
+	var output bytes.Buffer
+	if err := (Server{Input: strings.NewReader(request), Output: &output}).Run(ctx); err != nil {
+		t.Fatalf("run MCP server: %v", err)
+	}
+	if !strings.Contains(output.String(), `"isError":false`) || !strings.Contains(output.String(), `"content_returned":false`) {
+		t.Fatalf("unexpected export receipt: %s", output.String())
+	}
+	if strings.Contains(output.String(), "must-not-return") {
+		t.Fatalf("export response returned private report content: %s", output.String())
+	}
+	body, err := os.ReadFile(outputPath)
+	if err != nil || string(body) != content {
+		t.Fatalf("unexpected exported report: body=%q err=%v", body, err)
+	}
+	info, err := os.Stat(outputPath)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("report permissions are not private: info=%v err=%v", info, err)
 	}
 }
 

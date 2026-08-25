@@ -32,12 +32,22 @@ For any MCP-compatible agent, configure the absolute binary path with the `mcp` 
 
 Then ask the agent to run a read-only observability audit. The Agent Skill enforces evidence rules such as `UNKNOWN` not meaning `MISSING`; an unresolved Grafana datasource variable cannot justify a panel or metric deletion recommendation. See [`docs/agent-native-toolkit.md`](docs/agent-native-toolkit.md).
 
-The `v0.7.5` release makes monitoring control the first operational question. A panel or alert can be called broken only when its datasource is
+The `v0.7.6` release makes monitoring control the first operational question. A panel or alert can be called broken only when its datasource is
 explicitly bound to a Prometheus connector and the referenced metric is absent
 from that exact inventory. Parser uncertainty and datasource variables remain
-unproven rather than being promoted into false missing-metric claims. v0.7.5 also joins Grafana references to the bound Local connector identity and keeps reference membership independent of URL redaction, fixing the equal-URL false negative and internal-URL false positive found in v0.7.4. Exact failures appear before metadata hygiene, `BrokenDashboard` no longer claims CRITICAL from health metadata alone, and releases include a CycloneDX SBOM.
+unproven rather than being promoted into false missing-metric claims. It retains
+the v0.7.5 bound-inventory identity repair for equal and different Grafana and
+scan URLs.
 
-> **Release status:** `v0.7.5` is an Agent-native Preview. It includes the
+v0.7.6 also fails closed when an Agent audit has no live source instead
+of silently replaying old state. `agent-audit.v1` exposes `LIVE`/`REPLAY`
+provenance and evidence time. A deterministic derived-SLI analyzer models
+officially parsed `histogram_quantile()` inputs, P95/P99 recording-rule chains,
+and histogram metric TYPE drift without turning names or incomplete inventory
+into guessed failures. Owner-only report export, Local UI operator handoff, and
+scoped Agent question examples complete the review workflow.
+
+> **Release status:** `v0.7.6` is an Agent-native Preview. It includes the
 > portable `monicheck-observability-audit` Skill, a local stdio MCP server, and
 > bounded `agent-audit.v1` output while keeping collection and analysis inside
 > the deterministic Local engine. It also retains the `v0.6.6` shared-Grafana
@@ -57,7 +67,7 @@ Prebuilt releases cover both common CPU families. In Go release names,
 | macOS | `arm64` (Apple silicon) | `darwin_arm64.tar.gz` |
 
 Download the matching archive and `SHA256SUMS` from the
-[v0.7.5 Preview Release](https://github.com/xingzheson-collab/MoniCheck/releases/tag/v0.7.5).
+[v0.7.6 Preview Release](https://github.com/xingzheson-collab/MoniCheck/releases/tag/v0.7.6).
 Verify the checksum before running the binary.
 
 ## Quick start
@@ -107,6 +117,14 @@ without rerunning providers:
 ./monicheck ui --storage-path ./local-state.json
 # Equivalent Local workflow:
 ./monicheck local --serve-only --storage-path ./local-state.json
+```
+
+Export the complete owner-only report directly:
+
+```bash
+./monicheck report export \
+  --storage-path ./local-state.json \
+  --out ./monicheck-governance-report.json
 ```
 
 For monitoring-gap detection, combine telemetry evidence with an independent

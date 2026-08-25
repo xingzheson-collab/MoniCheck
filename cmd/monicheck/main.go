@@ -36,6 +36,8 @@ func main() {
 		os.Exit(runUI(ctx, os.Args[2:], os.Stdout, os.Stderr))
 	case "connectors":
 		os.Exit(runConnectors(os.Args[2:], os.Stdout, os.Stderr))
+	case "report":
+		os.Exit(runReport(ctx, os.Args[2:], os.Stdout, os.Stderr))
 	case "mcp":
 		os.Exit(runMCP(ctx, os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 	case "version":
@@ -47,6 +49,27 @@ func main() {
 		usage(os.Stderr)
 		os.Exit(2)
 	}
+}
+
+func runReport(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 || args[0] != "export" {
+		fmt.Fprintln(stderr, "usage: monicheck report export --storage-path FILE --out FILE")
+		return 2
+	}
+	fs := flag.NewFlagSet("report export", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	storagePath := fs.String("storage-path", defaultStoragePath(), "completed Local or Agent audit state file")
+	outputPath := fs.String("out", "", "private governance JSON output path")
+	if err := fs.Parse(args[1:]); err != nil || fs.NArg() != 0 || strings.TrimSpace(*outputPath) == "" {
+		return 2
+	}
+	export, err := localruntime.ExportLatestReport(ctx, *storagePath, *outputPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "export report: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "MoniCheck governance report exported: %s\nCreated: %s\n", *outputPath, export.CreatedAt.Format(time.RFC3339))
+	return 0
 }
 
 func runUI(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -320,5 +343,5 @@ func writePrivate(path, content string) error {
 	return os.WriteFile(path, []byte(content), 0o600)
 }
 func usage(out io.Writer) {
-	fmt.Fprintln(out, "MoniCheck - agent-native local observability audit\nUsage: monicheck local [options] | monicheck ui [options] | monicheck connectors list|validate | monicheck mcp | monicheck version")
+	fmt.Fprintln(out, "MoniCheck - agent-native local observability audit\nUsage: monicheck local [options] | monicheck ui [options] | monicheck report export [options] | monicheck connectors list|validate | monicheck mcp | monicheck version")
 }

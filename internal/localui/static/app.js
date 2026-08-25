@@ -64,12 +64,22 @@ function actionGroups() {
   if (!groups.length) return '<div class="panel empty">No open action groups in this audit.</div>'
   return `<div class="action-list">${groups.map((group) => `
     <article class="action-card">
-      <div class="action-head"><span class="badge ${severityClass(group.severity)}">${escapeHTML(group.severity)}</span><span>${group.family === 'monitoring-reference-failure' ? 'MONITORING FAILURE · ' : ''}${group.finding_count} findings</span></div>
+      <div class="action-head"><span class="badge ${severityClass(group.severity)}">${escapeHTML(group.severity)}</span><span>${group.family === 'monitoring-reference-failure' ? 'MONITORING FAILURE · ' : group.family === 'sli-integrity-failure' ? 'SLI INTEGRITY · ' : ''}${group.finding_count} findings</span></div>
       <h2>${escapeHTML(group.title)}</h2>
       <p>${escapeHTML(group.consequence)}</p>
       <dl><dt>First step</dt><dd>${escapeHTML(group.first_step)}</dd><dt>Verify</dt><dd>${escapeHTML(group.verification)}</dd></dl>
       <div class="action-foot"><code>${escapeHTML(group.family)}</code>${group.family === 'service-coverage-gap' ? '<button class="text-button" data-open-view="coverage">Open coverage</button>' : ''}</div>
     </article>`).join('')}</div>`
+}
+
+function operatorWorkflow() {
+  const workflow = audit.operator_workflow || {}
+  const questions = workflow.example_questions || []
+  return `<div class="section-heading"><div><p class="eyebrow">OPERATOR HANDOFF</p><h2>Monitoring failures appear before hygiene advice</h2></div></div><div class="workflow-grid">
+    <article class="panel"><span class="eyebrow">HUMAN DECISION</span><p>${escapeHTML(workflow.human_decision || '')}</p></article>
+    <article class="panel"><span class="eyebrow">CONFIGURATION REPAIR</span><p>${escapeHTML(workflow.configuration_repair || '')}</p></article>
+    <article class="panel"><span class="eyebrow">RESCAN VERIFICATION</span><p>${escapeHTML(workflow.rescan_verification || '')}</p></article>
+  </div>${questions.length ? `<div class="panel question-panel"><div><span class="eyebrow">ASK THIS AUDIT</span><h2>Continue with a scoped question</h2></div><div class="question-list">${questions.map((question) => `<button class="text-button question" data-copy-question="${escapeHTML(encodeURIComponent(question))}">${escapeHTML(question)}</button>`).join('')}</div></div>` : ''}`
 }
 
 function visibility() {
@@ -137,8 +147,9 @@ function render(view) {
   title.textContent = view === 'agent' ? 'Agent audit' : view[0].toUpperCase() + view.slice(1)
   if (view === 'overview') content.innerHTML = metrics() + table(report.priority_findings || [], [['Severity', 'severity'], ['Finding', 'type'], ['Resource', 'resource'], ['Recommendation', 'recommendation']])
   if (view === 'agent') {
-    const persisted = status.state_source === 'PERSISTED_AGENT_AUDIT'
-    content.innerHTML = `${metrics()}<div class="panel agent-state"><strong>${persisted ? 'Persisted Agent audit' : 'Current Local audit'}</strong><p>Monitoring failures appear before hygiene advice. This view reads the same durable evidence used by the MCP tools and does not contact providers or rerun analyzers.</p></div><div class="section-heading"><div><p class="eyebrow">MONITORING CONTROL</p><h2>What is broken, unguarded, or unproven?</h2></div><span>${audit.action_groups?.length || 0} groups</span></div>${actionGroups()}${visibility()}`
+    const replay = audit.state_source === 'REPLAY'
+    const collected = audit.evidence_collected_at ? new Date(audit.evidence_collected_at).toLocaleString() : 'Unknown'
+    content.innerHTML = `${metrics()}<div class="panel agent-state ${replay ? 'replay' : ''}"><div><span class="badge ${replay ? 'warning' : 'info'}">${escapeHTML(audit.state_source || 'UNKNOWN')}</span><strong>${replay ? 'Persisted evidence review' : 'Current live audit'}</strong></div><p>Evidence collected: ${escapeHTML(collected)}. ${replay ? 'This persisted view does not contact providers or rerun analyzers.' : 'This result came from configured live sources.'}</p></div><div class="section-heading"><div><p class="eyebrow">MONITORING CONTROL</p><h2>What is broken, unguarded, or unproven?</h2></div><span>${audit.action_groups?.length || 0} groups</span></div>${actionGroups()}${visibility()}${operatorWorkflow()}`
   }
   if (view === 'findings') content.innerHTML = table(report.priority_findings || [], [['Severity', 'severity'], ['Finding', 'type'], ['Resource', 'resource'], ['Risk', 'risk_score'], ['Recommendation', 'recommendation']])
   if (view === 'coverage') content.innerHTML = coverageView()
@@ -166,6 +177,12 @@ content.addEventListener('click', async (event) => {
   const viewButton = event.target.closest('[data-open-view]')
   if (viewButton) openView(viewButton.dataset.openView)
   const exceptionButton = event.target.closest('[data-copy-exception]')
+  const questionButton = event.target.closest('[data-copy-question]')
+  if (questionButton) {
+    await navigator.clipboard.writeText(decodeURIComponent(questionButton.dataset.copyQuestion))
+    questionButton.textContent = 'Copied question'
+    return
+  }
   if (!exceptionButton) return
   const row = JSON.parse(decodeURIComponent(exceptionButton.dataset.copyException))
   const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()

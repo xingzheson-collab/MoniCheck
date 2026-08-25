@@ -64,6 +64,7 @@ irrelevant.
 - `monicheck.connectors.list`: local connector catalog.
 - `monicheck.config.validate`: validates a versioned YAML configuration without exposing secret values.
 - `monicheck.audit.run`: contacts only user-selected sources, persists a local baseline, and returns bounded `agent-audit.v1` aggregate evidence.
+- `monicheck.report.export`: writes the latest complete owner-only governance report to a private local file without returning its body through MCP.
 - `monicheck.findings.query`: returns bounded current findings for a user-requested service, entity, type, or severity.
 - `monicheck.coverage.by_service`: returns one Service's deterministic signal matrix without collapsing `UNKNOWN` into `MISSING`.
 - `monicheck.entity.get`: returns one exact entity with bounded graph relationships and current findings.
@@ -78,6 +79,18 @@ The first operational question is monitoring control, not metadata hygiene.
 references that are absent from the corresponding Prometheus inventory. Parser
 failure, datasource variables, and incomplete inventory remain unresolved
 evidence and cannot be described as a dead panel or ineffective alert.
+
+`audit.run` fails closed unless at least one live source is configured. Its
+result includes `state_source: LIVE` and the evidence collection time. Opening
+completed state through the UI or query path is explicitly `REPLAY`; it never
+contacts providers, reruns time-sensitive analyzers, or creates a new baseline.
+
+Derived SLI integrity is deterministic rather than predictive. MoniCheck uses
+the official PromQL AST to identify `histogram_quantile()` inputs and traces
+them through explicit metric, recording-rule, and target relationships.
+Exactly bound missing inputs and histogram/summary TYPE drift are failures;
+an unproven chain remains `DerivedSLIInputUnverified`. Metric names alone never
+become P95/P99 evidence, and MoniCheck does not perform anomaly prediction.
 
 Every aggregate audit and Service coverage query includes
 `inventory_visibility`. Observed resources do not prove complete provider,
@@ -100,6 +113,14 @@ monicheck local --serve-only --storage-path /path/to/local-state.json
 
 Open the printed `?view=agent` loopback URL. The view reads the same durable
 owner-only state used by MCP queries.
+
+Export the complete owner-only report without extracting it from the state file:
+
+```bash
+monicheck report export \
+  --storage-path /path/to/local-state.json \
+  --out ./monicheck-governance-report.json
+```
 
 The Agent view renders deterministic action groups and an explicit inventory
 visibility boundary. Coverage renders missing and unknown rows per service and

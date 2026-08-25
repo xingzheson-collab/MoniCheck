@@ -368,6 +368,7 @@ func newRegistry() *analyzer.Registry {
 	registry.Register(analyzer.NewSLOWithoutAlertAnalyzer())
 	registry.Register(analyzer.NewSLOObjectiveQualityAnalyzer())
 	registry.Register(analyzer.NewSLOWindowCoverageAnalyzer())
+	registry.Register(analyzer.NewDerivedSLIIntegrityAnalyzer())
 	registry.Register(analyzer.NewEmptyDashboardAnalyzer())
 	registry.Register(analyzer.NewUnusedDatasourceAnalyzer())
 	registry.Register(analyzer.NewBrokenPanelQueryAnalyzer())

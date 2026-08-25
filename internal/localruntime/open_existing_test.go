@@ -2,6 +2,7 @@ package localruntime
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -38,5 +39,35 @@ func TestOpenExistingDoesNotRequireOrRunConnectors(t *testing.T) {
 	}
 	if statuses := runtime.Engine.ConnectorStatuses(); len(statuses) != 0 {
 		t.Fatalf("opening existing state ran connectors: %#v", statuses)
+	}
+}
+
+func TestExportLatestReportWritesPrivateOwnerFile(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "agent-state.json")
+	store, err := storage.NewFileStore(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	content := `{"contract_version":"governance-report.v1"}`
+	if err := store.ReportExports.Save(ctx, model.ReportExport{
+		ID: "report", Type: "governance", Format: "json", Origin: report.LocalPostureSnapshotOrigin,
+		ContentType: "application/json", Content: content, CreatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	outputPath := filepath.Join(dir, "exports", "governance.json")
+	if _, err := ExportLatestReport(ctx, statePath, outputPath); err != nil {
+		t.Fatalf("export latest report: %v", err)
+	}
+	body, err := os.ReadFile(outputPath)
+	if err != nil || string(body) != content {
+		t.Fatalf("unexpected exported report: body=%q err=%v", body, err)
+	}
+	info, err := os.Stat(outputPath)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("report permissions are not private: info=%v err=%v", info, err)
 	}
 }
