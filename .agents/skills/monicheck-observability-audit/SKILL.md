@@ -1,19 +1,23 @@
 ---
 name: monicheck-observability-audit
-description: Check whether monitoring itself is broken, unguarded, or unproven with read-only MoniCheck evidence across Prometheus, Grafana, and mixed observability estates.
+description: Review what changed for one service, deployment, migration, or incident with private read-only MoniCheck evidence.
 license: Apache-2.0
 metadata:
   author: MoniCheck
-  version: "0.5.0"
+  version: "0.6.0"
 ---
 
-# MoniCheck Observability Audit
+# MoniCheck Monitoring Change Review
 
-Use MoniCheck as the deterministic evidence engine. Use the host agent for scope clarification, interpretation, and report writing.
+Use MoniCheck as the deterministic evidence engine. Use the host agent to
+clarify one operator question, interpret bounded evidence, and write a concise
+change review. Do not grade a team or lead with the whole estate backlog.
 
 ## Run The Audit
 
-1. Confirm which local sources the user intends to inspect. Never infer permission to contact an endpoint.
+1. Confirm the service, deployment, migration, incident follow-up, or other
+   bounded question the user wants to review, then confirm the smallest useful
+   local source scope. Never infer permission to contact an endpoint.
 2. Keep credentials in the MoniCheck process environment. Do not request secrets in chat or pass them as tool arguments.
 3. Prefer the local MCP tools when available:
    - `monicheck.connectors.list` for supported evidence sources.
@@ -32,7 +36,9 @@ Use MoniCheck as the deterministic evidence engine. Use the host agent for scope
      zero active assessments, show the exact config index and correction path;
      do not treat the no-op policy as a successful audit.
 4. If MCP is unavailable, run `scripts/run-audit.sh` with a local configuration path or process environment prepared by the user. Do not place internal endpoint values in the Agent command. The script writes owner-only gate and evidence files without exporting raw provider data.
-5. Treat the first successful scan as a baseline. On later scans, lead with new and regressed evidence.
+5. Treat the first successful scan as a baseline. On later scans, lead with at most five
+   high-confidence action groups that are new, reopened, or regressed. Keep
+   persistent known debt available without repeating it as the headline.
 
 ## Answer A Scoped User Question
 
@@ -48,11 +54,18 @@ Every query requires a concise `purpose` derived from the user's active question
 
 Lead with MoniCheck's deterministic `action_groups` when they are present. Show `monitoring-reference-failure` before coverage gaps and show both before hygiene advice. Preserve each consequence, first step, and verification condition. Use the Agent to ask environment-specific questions such as whether a target was intentionally retired; do not replace a deterministic group with a newly invented root cause.
 
+Do not present an aggregate risk score as a team grade. If the user did not ask
+for an estate review, do not broaden a scoped question merely because the
+aggregate audit discovered unrelated findings.
+
 ## Evidence Rules
 
 - Separate `OBSERVED`, `MISSING`, and `UNKNOWN`. Unknown evidence is not a failure.
 - A Grafana datasource variable that cannot be bound to a concrete source is `UNKNOWN`. Do not fan it out across every Prometheus source and do not recommend deleting its panel or metric.
-- Do not claim estate-wide coverage from telemetry alone. A coverage claim needs an independent inventory such as Kubernetes manifests or an explicit service list.
+- Do not claim a monitoring gap from telemetry or asset inventory alone. A
+  missing-coverage conclusion needs an explicit policy, SLO, reviewed baseline,
+  or equivalent declared expectation. Independent inventory can establish that
+  a resource exists, but not that the organization intended every signal for it.
 - Do not recommend deletion from a single absent metric observation. Require source attribution plus corroborating usage or history evidence.
 - Preserve analyzer severity and evidence trust. The model may explain a finding, but must not silently strengthen it.
 - Call a panel or alert metric reference broken only when MoniCheck returns `PanelMetricNotCollected` or `AlertRuleMetricNotCollected`. `UnresolvedPanelQueryMetric` is parser uncertainty, not proof that Prometheus failed to collect a metric.
@@ -68,4 +81,14 @@ Read [references/evidence-model.md](references/evidence-model.md) when interpret
 
 ## Report Outcome
 
-Produce a concise report containing scope, `LIVE` or `REPLAY` provenance, evidence time, evidence trust, regressions, high-confidence finding groups, unknowns, and prioritized next actions. Separate work into human decisions, approved configuration repair, and live rescan verification. State when the evidence is insufficient. Ask for additional evidence only when it can materially change a decision. After a completed audit, offer `monicheck ui --storage-path <same-state-path>` for visual review and `monicheck report export --storage-path <same-state-path> --out ./monicheck-governance-report.json` for the owner-only report; neither command reruns collection.
+Produce a concise change review containing the question and scope, `LIVE` or
+`REPLAY` provenance, evidence time, evidence trust, up to five leading new or
+regressed action groups, unknowns that can change the decision, and verification
+steps. Put persistent known debt in a secondary section. Separate work into
+human decisions, reviewable configuration repair, and live rescan verification.
+State when the evidence is insufficient. Ask for additional evidence only when
+it can materially change a decision. After a completed review, offer
+`monicheck ui --storage-path <same-state-path>` for visual review and
+`monicheck report export --storage-path <same-state-path> --out
+./monicheck-governance-report.json` for the owner-only report; neither command
+reruns collection.

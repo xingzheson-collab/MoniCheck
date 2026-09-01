@@ -1,6 +1,16 @@
 # MoniCheck
 
-MoniCheck Public is an agent-native, local-first control check for self-hosted and hybrid monitoring. Enterprises rarely lack dashboards, alerts, and metrics; they lose confidence that those assets still work together. MoniCheck tells the AI agent you already use where monitoring is broken, where an expected guard is missing, and where the available evidence cannot prove coverage. A deterministic Go engine, portable Agent Skill, and read-only local MCP tools keep those claims separate from metadata hygiene and model guesses.
+MoniCheck Public is a private, agent-native monitoring change reviewer for
+self-hosted and hybrid monitoring. Ask about one service, deployment,
+migration, or incident follow-up. MoniCheck compares read-only local evidence
+with the latest compatible baseline and shows what newly broke, what remains
+unproven, and the smallest safe next step.
+
+It does not grade an SRE team, dump the whole estate backlog as first value, or
+assume every unmonitored resource is defective. A deterministic Go engine,
+portable Agent Skill, and local MCP tools keep facts separate from business
+intent and model guesses. Known debt remains available without leading every
+later review.
 
 This public repository is intentionally local-only. It contains no hosted website, cloud account system, organization control plane, billing, or managed execution code.
 

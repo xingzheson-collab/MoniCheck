@@ -1,6 +1,11 @@
-# Agent-Native Public Toolkit
+# Agent-Native Monitoring Change Reviewer
 
-MoniCheck Public is a local evidence toolkit for the AI agent the user already operates. It does not ship another chat UI or require a hosted model.
+MoniCheck Public is a local monitoring change reviewer for the AI agent the
+user already operates. The default job is one bounded service, deployment,
+migration, or incident follow-up, not an estate-wide score. It leads with new
+and regressed evidence, keeps known debt in the private baseline, and does not
+infer that an unmonitored resource is defective without declared intent. It
+does not ship another chat UI or require a hosted model.
 
 ## Components
 
